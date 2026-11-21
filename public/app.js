@@ -69,12 +69,34 @@ async function showReplay(id) {
   } catch (e) { notify(e.message, true); }
 }
 
+const SERIES_MAX_GAMES = 7;
+
 function groupNode(g) {
   return `<li><details data-group="${esc(g.id)}"><summary>${esc(g.name)}</summary><ul class="kids"></ul></details></li>`;
 }
 
-function gameLeaf(r, i) {
-  return `<li><button class="game" data-id="${esc(r.id)}"><em>${i + 1}</em><span>${esc(r.blue?.name || "Blue")}</span><b>${r.blue?.goals ?? "–"} : ${r.orange?.goals ?? "–"}</b><span>${esc(r.orange?.name || "Orange")}</span></button></li>`;
+function gameButtons(games) {
+  return games.map(r => `<button class="game" data-id="${esc(r.id)}" title="${esc(r.blue?.name || "Blue")} vs ${esc(r.orange?.name || "Orange")}">${r.blue?.goals ?? "–"}–${r.orange?.goals ?? "–"}</button>`).join("");
+}
+
+async function fetchGames(id, count) {
+  return (await api.get(`replays?group=${id}&sort-by=replay-date&sort-dir=asc&count=${count}`)).list || [];
+}
+
+async function resolveChild(li) {
+  const id = li.dataset.group;
+  try {
+    const games = await fetchGames(id, SERIES_MAX_GAMES + 1);
+    if (games.length > SERIES_MAX_GAMES) {
+      const name = li.querySelector(".sname").innerHTML;
+      li.className = "";
+      li.innerHTML = `<details data-group="${esc(id)}"><summary>${name}</summary><ul class="kids"></ul></details>`;
+    } else {
+      li.querySelector(".games").innerHTML = games.length ? gameButtons(games) : '<span class="hint">no replays</span>';
+    }
+  } catch (e) {
+    li.querySelector(".games").innerHTML = `<span class="hint err">${esc(e.message)}</span>`;
+  }
 }
 
 async function fillGroup(details) {
@@ -85,9 +107,13 @@ async function fillGroup(details) {
   const id = details.dataset.group;
   try {
     const kids = (await api.get(`groups?group=${id}&sort-by=created&sort-dir=desc&count=50`)).list || [];
-    if (kids.length) { ul.innerHTML = kids.map(groupNode).join(""); return; }
-    const games = (await api.get(`replays?group=${id}&sort-by=replay-date&sort-dir=asc&count=50`)).list || [];
-    ul.innerHTML = games.length ? games.map(gameLeaf).join("") : '<li class="hint">No replays.</li>';
+    if (!kids.length) {
+      const games = await fetchGames(id, 50);
+      ul.innerHTML = games.length ? `<li class="series"><span class="games">${gameButtons(games)}</span></li>` : '<li class="hint">No replays.</li>';
+      return;
+    }
+    ul.innerHTML = kids.map(g => `<li class="series" data-group="${esc(g.id)}"><span class="sname">${esc(g.name)}</span><span class="games"><span class="hint">…</span></span></li>`).join("");
+    for (const li of [...ul.children]) await resolveChild(li);
   } catch (e) {
     delete details.dataset.loaded;
     ul.innerHTML = `<li class="hint err">${esc(e.message)}</li>`;
@@ -95,6 +121,12 @@ async function fillGroup(details) {
 }
 
 const yearOf = g => (g.created || "").slice(0, 4) || (g.name.match(/20\d\d/) || ["Other"])[0];
+let groupsByYear = {};
+
+function showYear(year) {
+  [...$("years").children].forEach(b => b.classList.toggle("on", b.dataset.year === year));
+  $("tree").innerHTML = `<ul>${groupsByYear[year].map(groupNode).join("")}</ul>`;
+}
 
 async function loadTree() {
   try {
@@ -102,12 +134,18 @@ async function loadTree() {
     if (!cfg.hasToken) return notify("Server has no ballchasing token configured — only replay upload is available.", true);
     const list = (await api.get(`groups?creator=${cfg.creator}&sort-by=created&sort-dir=desc&count=50`)).list || [];
     if (!list.length) return notify("No groups found.");
-    const byYear = {};
-    list.forEach(g => (byYear[yearOf(g)] ||= []).push(g));
-    $("tree").innerHTML = Object.keys(byYear).sort().reverse().map((y, i) =>
-      `<details class="year"${i === 0 ? " open" : ""}><summary>${esc(y)}</summary><ul class="kids">${byYear[y].map(groupNode).join("")}</ul></details>`).join("");
+    groupsByYear = {};
+    list.forEach(g => (groupsByYear[yearOf(g)] ||= []).push(g));
+    const years = Object.keys(groupsByYear).sort().reverse();
+    $("years").innerHTML = years.map(y => `<button data-year="${esc(y)}">${esc(y)}</button>`).join("");
+    showYear(years[0]);
   } catch (e) { notify(e.message, true); }
 }
+
+$("years").onclick = e => {
+  const b = e.target.closest("button");
+  if (b) showYear(b.dataset.year);
+};
 
 $("tree").addEventListener("toggle", e => {
   if (e.target.open && e.target.dataset.group) fillGroup(e.target);
@@ -119,6 +157,35 @@ $("tree").onclick = e => {
   $("tree").querySelectorAll(".game.on").forEach(x => x.classList.remove("on"));
   b.classList.add("on");
   showReplay(b.dataset.id).then(() => $("out").scrollIntoView({ behavior: "smooth", block: "start" }));
+};
+
+let rankingRequest = 0;
+
+async function loadRanking(days) {
+  const ticket = ++rankingRequest;
+  const body = $("rankbody");
+  body.innerHTML = '<p class="hint">Calculating… the first load can take a minute.</p>';
+  try {
+    const res = await fetch("/api/rankings?days=" + days);
+    const d = await res.json();
+    if (ticket !== rankingRequest) return;
+    if (!res.ok) throw new Error(d.error || "Rankings unavailable");
+    const rows = d.teams.map((t, i) => {
+      const pct = Math.round(t.winRate * 100);
+      return `<div class="rrow"><span class="rk">${i + 1}</span><span class="rn">${esc(t.name)}</span><span class="rg">${t.wins}–${t.games - t.wins}</span><span class="wr"><i style="width:${pct}%"></i><b>${pct}%</b></span></div>`;
+    }).join("");
+    const note = `Minimum ${d.minGames} games${d.since ? ` · data only goes back to ${esc(d.since)}` : ""}`;
+    body.innerHTML = (rows || '<p class="hint">Not enough games in this period.</p>') + `<p class="hint">${note}</p>`;
+  } catch (e) {
+    if (ticket === rankingRequest) body.innerHTML = `<p class="hint err">${esc(e.message)}</p>`;
+  }
+}
+
+$("period").onclick = e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  [...$("period").children].forEach(c => c.classList.toggle("on", c === b));
+  loadRanking(Number(b.dataset.days));
 };
 
 document.querySelector(".tabs").onclick = e => {
@@ -142,3 +209,4 @@ drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]); };
 
 loadTree();
+loadRanking(30);

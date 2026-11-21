@@ -7,7 +7,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-ap
 h1{font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin:4px 0 14px}
 button{font:inherit;color:var(--text);background:var(--head);border:1px solid var(--line);border-radius:5px;padding:6px 12px;cursor:pointer}
 .tabs{display:flex;gap:6px;margin-bottom:12px}
-.tabs .on{background:var(--blue);border-color:var(--blue);color:#fff}
+.tabs .on,.chips .on{background:var(--blue);border-color:var(--blue);color:#fff}
 .drop{border:2px dashed var(--line);border-radius:8px;padding:22px;text-align:center;color:var(--mute);background:var(--panel)}
 .drop.over{border-color:var(--blue);color:var(--text)}
 .drop button{margin-left:8px}
@@ -40,10 +40,20 @@ td.name{font-weight:600}.top{font-weight:700}
 .tree>details>ul{padding-left:12px}
 .tree summary{cursor:pointer;padding:6px 10px;border-radius:5px}
 .tree summary:hover{background:var(--head)}
-.tree details.year>summary{font-weight:700;font-size:15px}
 .tree .hint{padding:6px 10px;color:var(--mute)}
-.tree .game{display:grid;grid-template-columns:24px 1fr auto 1fr;gap:10px;align-items:center;width:100%;border:0;background:transparent;text-align:left;padding:6px 10px}
-.tree .game:hover,.tree .game.on{background:var(--head)}
-.tree .game em{color:var(--mute);font-style:normal;font-size:12px}
-.tree .game b{font-variant-numeric:tabular-nums}
-.tree .game span:last-child{text-align:right}
+
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.rank{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:12px}
+.rhead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
+.rhead .chips{margin:0}
+.rrow{display:grid;grid-template-columns:24px 1fr 56px minmax(90px,38%);gap:10px;align-items:center;padding:4px 0}
+.rk{color:var(--mute)}.rn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rg{color:var(--mute);text-align:right;font-variant-numeric:tabular-nums}
+.wr{position:relative;height:20px;background:var(--head);border-radius:4px;overflow:hidden}
+.wr i{position:absolute;inset:0 auto 0 0;background:var(--win);opacity:.45}
+.wr b{position:relative;display:block;text-align:right;padding-right:8px;line-height:20px;font-size:12px}
+.hint{color:var(--mute);font-size:12px;margin:6px 0 0}.hint.err{color:var(--loss)}
+.series{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:4px 10px}
+.sname{flex:0 1 240px;min-width:140px}
+.games{display:flex;flex-wrap:wrap;gap:4px}
+.game{padding:2px 9px;border-radius:12px;font-size:12px;font-variant-numeric:tabular-nums}
+.game.on{background:var(--blue);border-color:var(--blue);color:#fff}
