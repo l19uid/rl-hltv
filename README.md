@@ -19,22 +19,13 @@ Optional env: `PORT`, `RLCS_CREATOR_ID`, `DB_PATH` (default `data/games.db`),
 ## Match history
 
 Games are stored in a local SQLite database. On start, and then hourly, the server checks
-when it last synced and fetches only games newer than the newest stored one if 24 hours have passed.
-The first sync downloads up to 400 days of games and can take a few minutes; rankings appear
-when it finishes. `npm run sync` runs a sync by hand.
-
-The event tree and single-game stats still call the API when clicked (cached for 5 minutes).
+when it last synced and fetches only newer games if 24 hours have passed. The first sync can
+take a few minutes. `npm run sync` runs a sync by hand.
 
 ## Deploy
 
-Needs a host where the database file survives restarts:
-
-- Render: use a paid web service with a persistent disk mounted at `/var/data` and set
-  `DB_PATH=/var/data/games.db`. The free plan wipes the disk on every restart, which would
-  trigger a full re-download each time.
-- Fly.io or Railway: attach a volume and point `DB_PATH` at it.
-
-Set `BALLCHASING_TOKEN` as a secret. On Render also set `NODE_VERSION=22`.
-Start command `npm start`, build command `npm install`.
+Needs a host where the database file survives restarts (Render paid plan with a disk at
+`/var/data` and `DB_PATH=/var/data/games.db`, Fly.io or Railway with a volume).
+Set `BALLCHASING_TOKEN` as a secret and `NODE_VERSION=22`. Build `npm install`, start `npm start`.
 
 Credit ballchasing.com as the data source.

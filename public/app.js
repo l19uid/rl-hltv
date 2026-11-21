@@ -69,7 +69,11 @@ async function showReplay(id) {
   } catch (e) { notify(e.message, true); }
 }
 
-const SERIES_MAX_GAMES = 7;
+function openMatch(btn, scope) {
+  scope.querySelectorAll(".game.on").forEach(x => x.classList.remove("on"));
+  btn.classList.add("on");
+  showReplay(btn.dataset.id).then(() => $("out").scrollIntoView({ behavior: "smooth", block: "start" }));
+}
 
 function groupNode(g) {
   return `<li><details data-group="${esc(g.id)}"><summary>${esc(g.name)}</summary><ul class="kids"></ul></details></li>`;
@@ -79,21 +83,24 @@ function gameButtons(games) {
   return games.map(r => `<button class="game" data-id="${esc(r.id)}" title="${esc(r.blue?.name || "Blue")} vs ${esc(r.orange?.name || "Orange")}">${r.blue?.goals ?? "–"}–${r.orange?.goals ?? "–"}</button>`).join("");
 }
 
-async function fetchGames(id, count) {
-  return (await api.get(`replays?group=${id}&sort-by=replay-date&sort-dir=asc&count=${count}`)).list || [];
+async function fetchGames(id) {
+  return (await api.get(`replays?group=${id}&sort-by=replay-date&sort-dir=asc&count=50`)).list || [];
 }
 
+// A group's replays endpoint only returns replays directly inside it. A series holds games;
+// a stage or event holds other groups, so an empty result means "open it as a folder".
 async function resolveChild(li) {
   const id = li.dataset.group;
   try {
-    const games = await fetchGames(id, SERIES_MAX_GAMES + 1);
-    if (games.length > SERIES_MAX_GAMES) {
-      const name = li.querySelector(".sname").innerHTML;
-      li.className = "";
-      li.innerHTML = `<details data-group="${esc(id)}"><summary>${name}</summary><ul class="kids"></ul></details>`;
-    } else {
-      li.querySelector(".games").innerHTML = games.length ? gameButtons(games) : '<span class="hint">no replays</span>';
+    const games = await fetchGames(id);
+    if (games.length) {
+      li.querySelector(".games").innerHTML = gameButtons(games);
+      return;
     }
+    const name = li.querySelector(".sname").innerHTML;
+    li.className = "";
+    li.removeAttribute("data-group");
+    li.innerHTML = `<details data-group="${esc(id)}"><summary>${name}</summary><ul class="kids"></ul></details>`;
   } catch (e) {
     li.querySelector(".games").innerHTML = `<span class="hint err">${esc(e.message)}</span>`;
   }
@@ -106,10 +113,10 @@ async function fillGroup(details) {
   ul.innerHTML = '<li class="hint">Loading…</li>';
   const id = details.dataset.group;
   try {
-    const kids = (await api.get(`groups?group=${id}&sort-by=created&sort-dir=desc&count=50`)).list || [];
+    const kids = (await api.get(`groups?group=${id}&sort-by=created&sort-dir=desc&count=200`)).list || [];
     if (!kids.length) {
-      const games = await fetchGames(id, 50);
-      ul.innerHTML = games.length ? `<li class="series"><span class="games">${gameButtons(games)}</span></li>` : '<li class="hint">No replays.</li>';
+      const games = await fetchGames(id);
+      ul.innerHTML = games.length ? `<li class="series"><span class="games">${gameButtons(games)}</span></li>` : '<li class="hint">Nothing in this group.</li>';
       return;
     }
     ul.innerHTML = kids.map(g => `<li class="series" data-group="${esc(g.id)}"><span class="sname">${esc(g.name)}</span><span class="games"><span class="hint">…</span></span></li>`).join("");
@@ -132,10 +139,11 @@ async function loadTree() {
   try {
     const cfg = await (await fetch("/api/config")).json();
     if (!cfg.hasToken) return notify("Server has no ballchasing token configured — only replay upload is available.", true);
-    const list = (await api.get(`groups?creator=${cfg.creator}&sort-by=created&sort-dir=desc&count=50`)).list || [];
-    if (!list.length) return notify("No groups found.");
+    const list = (await api.get(`groups?creator=${cfg.creator}&sort-by=created&sort-dir=desc&count=200`)).list || [];
+    if (!list.length) return notify("No groups found for this uploader — check RLCS_CREATOR_ID.", true);
+    const roots = list.filter(g => !g.parent);
     groupsByYear = {};
-    list.forEach(g => (groupsByYear[yearOf(g)] ||= []).push(g));
+    (roots.length ? roots : list).forEach(g => (groupsByYear[yearOf(g)] ||= []).push(g));
     const years = Object.keys(groupsByYear).sort().reverse();
     $("years").innerHTML = years.map(y => `<button data-year="${esc(y)}">${esc(y)}</button>`).join("");
     showYear(years[0]);
@@ -153,10 +161,7 @@ $("tree").addEventListener("toggle", e => {
 
 $("tree").onclick = e => {
   const b = e.target.closest(".game");
-  if (!b) return;
-  $("tree").querySelectorAll(".game.on").forEach(x => x.classList.remove("on"));
-  b.classList.add("on");
-  showReplay(b.dataset.id).then(() => $("out").scrollIntoView({ behavior: "smooth", block: "start" }));
+  if (b) openMatch(b, $("tree"));
 };
 
 let rankingRequest = 0;
@@ -217,10 +222,7 @@ $("rankbody").onclick = e => {
 
 $("teamgames").onclick = e => {
   const b = e.target.closest(".game");
-  if (!b) return;
-  $("teamgames").querySelectorAll(".game.on").forEach(x => x.classList.remove("on"));
-  b.classList.add("on");
-  showReplay(b.dataset.id).then(() => $("out").scrollIntoView({ behavior: "smooth", block: "start" }));
+  if (b) openMatch(b, $("teamgames"));
 };
 
 $("period").onclick = e => {

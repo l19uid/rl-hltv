@@ -8,6 +8,7 @@ h1{font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute
 button{font:inherit;color:var(--text);background:var(--head);border:1px solid var(--line);border-radius:5px;padding:6px 12px;cursor:pointer}
 .tabs{display:flex;gap:6px;margin-bottom:12px}
 .tabs .on,.chips .on{background:var(--blue);border-color:var(--blue);color:#fff}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .drop{border:2px dashed var(--line);border-radius:8px;padding:22px;text-align:center;color:var(--mute);background:var(--panel)}
 .drop.over{border-color:var(--blue);color:var(--text)}
 .drop button{margin-left:8px}
@@ -33,20 +34,17 @@ td.name{font-weight:600}.top{font-weight:700}
 .star{color:var(--star);margin-left:6px}
 .pf{color:var(--mute);font-size:11px;margin-left:6px;font-weight:400}
 .foot{color:var(--mute);font-size:12px;margin-top:14px}
-
 .tree{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 4px;max-height:380px;overflow:auto}
 .tree:empty{display:none}
 .tree ul{list-style:none;margin:0;padding:0 0 0 18px}
-.tree>details>ul{padding-left:12px}
+.tree>ul{padding-left:12px}
 .tree summary{cursor:pointer;padding:6px 10px;border-radius:5px}
 .tree summary:hover{background:var(--head)}
-.tree .hint{padding:6px 10px;color:var(--mute)}
-
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .rank{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:12px}
 .rhead{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px}
 .rhead .chips{margin:0}
-.rrow{width:100%;border:0;background:transparent;text-align:left;border-radius:5px;padding:4px 6px;display:grid;grid-template-columns:24px 1fr 56px minmax(90px,38%);gap:10px;align-items:center;padding:4px 0}
+.rrow{width:100%;border:0;background:transparent;text-align:left;border-radius:5px;padding:4px 6px;display:grid;grid-template-columns:24px 1fr 56px minmax(90px,38%);gap:10px;align-items:center}
+.rrow:hover,.rrow.on{background:var(--head)}
 .rk{color:var(--mute)}.rn{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rg{color:var(--mute);text-align:right;font-variant-numeric:tabular-nums}
 .wr{position:relative;height:20px;background:var(--head);border-radius:4px;overflow:hidden}
 .wr i{position:absolute;inset:0 auto 0 0;background:var(--win);opacity:.45}
@@ -57,7 +55,6 @@ td.name{font-weight:600}.top{font-weight:700}
 .games{display:flex;flex-wrap:wrap;gap:4px}
 .game{padding:2px 9px;border-radius:12px;font-size:12px;font-variant-numeric:tabular-nums}
 .game.on{background:var(--blue);border-color:var(--blue);color:#fff}
-.rrow:hover,.rrow.on{background:var(--head)}
 #more{margin-top:8px;font-size:12px;padding:3px 10px}
 .tg{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.tg .games{margin-top:6px}
 .game.w{border-color:var(--win)}.game.l{border-color:var(--loss)}

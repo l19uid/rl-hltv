@@ -25,6 +25,9 @@ async function syncNow(db, now = Date.now()) {
   const newest = db.newest();
   const since = newest ? newest - OVERLAP_DAYS * DAY_MS : now - RETAIN_DAYS * DAY_MS;
   const incoming = await fetchSince(since);
+  if (!incoming.length && !db.count()) {
+    throw new Error(`No replays found for uploader ${CREATOR}. Check RLCS_CREATOR_ID.`);
+  }
   db.upsertGames(incoming);
   db.prune(now - RETAIN_DAYS * DAY_MS);
   db.setMeta("lastSync", new Date(now).toISOString());

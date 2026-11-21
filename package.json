@@ -2,14 +2,7 @@
   "name": "rl-replay-site",
   "version": "1.0.0",
   "private": true,
-  "scripts": {
-    "start": "node server.js",
-    "sync": "node sync.js"
-  },
-  "engines": {
-    "node": ">=22"
-  },
-  "dependencies": {
-    "better-sqlite3": "^13.2.0"
-  }
+  "scripts": { "start": "node server.js", "sync": "node sync.js" },
+  "engines": { "node": ">=22" },
+  "dependencies": { "better-sqlite3": "^13.2.0" }
 }
