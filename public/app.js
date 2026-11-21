@@ -170,6 +170,11 @@ async function loadRanking() {
     const res = await fetch(`/api/rankings?days=${rankState.days}&limit=${rankState.limit}`);
     const d = await res.json();
     if (ticket !== rankingRequest) return;
+    if (res.status === 503 && d.syncing) {
+      body.innerHTML = `<p class="hint">${esc(d.error)}</p>`;
+      setTimeout(() => ticket === rankingRequest && loadRanking(), 15000);
+      return;
+    }
     if (!res.ok) throw new Error(d.error || "Rankings unavailable");
     const rows = d.teams.map((t, i) => {
       const pct = Math.round(t.winRate * 100);

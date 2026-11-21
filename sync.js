@@ -1,56 +1,41 @@
 const path = require("path");
-const { loadStore, saveStore, mergeGames } = require("./store");
+const { BASE, CREATOR, TOKEN, getJson } = require("./ballchasing");
+const { openDb } = require("./db");
 
-const TOKEN = process.env.BALLCHASING_TOKEN;
-const CREATOR = process.env.RLCS_CREATOR_ID || "76561199225615730";
-const UPSTREAM = process.env.BALLCHASING_URL || "https://ballchasing.com/api/";
-const FILE = process.env.DATA_FILE || path.join(__dirname, "data", "games.json");
 const RETAIN_DAYS = 400;
 const OVERLAP_DAYS = 3;
-const MIN_GAP_MS = Number(process.env.REQUEST_GAP_MS || 600);
 const MAX_PAGES = 60;
 const DAY_MS = 86400000;
 
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-
-async function getJson(url) {
-  for (let attempt = 1; attempt <= 4; attempt++) {
-    const res = await fetch(url, { headers: { Authorization: TOKEN } });
-    await sleep(MIN_GAP_MS);
-    if (res.status === 429) { await sleep(2000 * attempt); continue; }
-    if (!res.ok) throw new Error(`ballchasing returned ${res.status}`);
-    return res.json();
-  }
-  throw new Error("ballchasing rate limit exceeded");
-}
-
 async function fetchSince(sinceMs) {
-  let url = `${UPSTREAM}replays?uploader=${CREATOR}&replay-date-after=${encodeURIComponent(new Date(sinceMs).toISOString())}&sort-by=replay-date&sort-dir=desc&count=200`;
+  let url = `${BASE}replays?uploader=${CREATOR}&replay-date-after=${encodeURIComponent(new Date(sinceMs).toISOString())}&sort-by=replay-date&sort-dir=desc&count=200`;
   const games = [];
   for (let page = 0; url && page < MAX_PAGES; page++) {
     const data = await getJson(url);
     for (const r of data.list || []) {
-      games.push({ i: r.id, t: Date.parse(r.date || r.created), b: r.blue?.name, o: r.orange?.name, x: r.blue?.goals, y: r.orange?.goals });
+      games.push({ id: r.id, t: Date.parse(r.date || r.created), blue: r.blue?.name ?? null, orange: r.orange?.name ?? null, bg: r.blue?.goals ?? null, og: r.orange?.goals ?? null });
     }
-    url = data.next && data.next.startsWith(UPSTREAM) ? data.next : null;
+    url = data.next && data.next.startsWith(BASE) ? data.next : null;
   }
   return games;
 }
 
-async function main() {
+async function syncNow(db, now = Date.now()) {
   if (!TOKEN) throw new Error("BALLCHASING_TOKEN is not set");
-  const now = Date.now();
-  const existing = loadStore(FILE)?.games || [];
-  const newest = existing.reduce((max, g) => Math.max(max, g.t), 0);
+  const newest = db.newest();
   const since = newest ? newest - OVERLAP_DAYS * DAY_MS : now - RETAIN_DAYS * DAY_MS;
-
   const incoming = await fetchSince(since);
-  const games = mergeGames(existing, incoming, now, RETAIN_DAYS);
-  saveStore(FILE, { updatedAt: new Date(now).toISOString(), games });
-  console.log(`fetched ${incoming.length}, stored ${games.length} games (${games.length - existing.length} new)`);
+  db.upsertGames(incoming);
+  db.prune(now - RETAIN_DAYS * DAY_MS);
+  db.setMeta("lastSync", new Date(now).toISOString());
+  return incoming.length;
 }
 
-main().catch(err => {
-  console.error(err.message);
-  process.exit(1);
-});
+module.exports = { syncNow };
+
+if (require.main === module) {
+  const db = openDb(process.env.DB_PATH || path.join(__dirname, "data", "games.db"));
+  syncNow(db)
+    .then(n => console.log(`fetched ${n} games, ${db.count()} stored`))
+    .catch(err => { console.error(err.message); process.exit(1); });
+}
