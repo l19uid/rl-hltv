@@ -69,15 +69,33 @@ async function showReplay(id) {
   } catch (e) { notify(e.message, true); }
 }
 
-async function loadReplays(groupId) {
-  notify("Loading series…");
+const trail = [];
+
+function groupRow(g) {
+  return `<button class="row group" data-group="${esc(g.id)}"><span>${esc(g.name)}</span><span class="s">›</span><span></span></button>`;
+}
+
+function backRow() {
+  return trail.length ? `<button class="row group" data-back="1"><span>‹ Back</span><span></span><span></span></button>` : "";
+}
+
+async function loadReplays(groupId, push = false) {
+  if (push) trail.push(groupId);
+  else if (!trail.length || trail[trail.length - 1] !== groupId) trail.length = 0, trail.push(groupId);
+  notify("Loading…");
   try {
     const data = await api.get(`replays?group=${groupId}&sort-by=replay-date&sort-dir=desc&count=20`);
     const list = data.list || [];
-    $("replays").innerHTML = list.map(r => `<button class="row" data-id="${esc(r.id)}">
-      <span>${esc(r.blue?.name || "Blue")}</span><span class="s">${r.blue?.goals ?? "–"} : ${r.orange?.goals ?? "–"}</span><span class="a">${esc(r.orange?.name || "Orange")}</span></button>`).join("");
-    notify(list.length ? "" : "No replays in this group.");
-    if (list[0]) showReplay(list[0].id);
+    if (list.length) {
+      $("replays").innerHTML = backRow() + list.map(r => `<button class="row" data-id="${esc(r.id)}">
+        <span>${esc(r.blue?.name || "Blue")}</span><span class="s">${r.blue?.goals ?? "–"} : ${r.orange?.goals ?? "–"}</span><span class="a">${esc(r.orange?.name || "Orange")}</span></button>`).join("");
+      notify("");
+      showReplay(list[0].id);
+      return;
+    }
+    const kids = (await api.get(`groups?group=${groupId}&sort-by=created&sort-dir=desc&count=30`)).list || [];
+    $("replays").innerHTML = backRow() + kids.map(groupRow).join("");
+    notify(kids.length ? "Pick a stage or series." : "No replays in this group.");
   } catch (e) { notify(e.message, true); }
 }
 
@@ -101,7 +119,10 @@ $("groups").onclick = e => {
 };
 $("replays").onclick = e => {
   const b = e.target.closest(".row");
-  if (b) showReplay(b.dataset.id);
+  if (!b) return;
+  if (b.dataset.back) { trail.pop(); return loadReplays(trail.pop()); }
+  if (b.dataset.group) return loadReplays(b.dataset.group, true);
+  showReplay(b.dataset.id);
 };
 document.querySelector(".tabs").onclick = e => {
   const b = e.target.closest("button");
