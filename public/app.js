@@ -69,61 +69,58 @@ async function showReplay(id) {
   } catch (e) { notify(e.message, true); }
 }
 
-const trail = [];
-
-function groupRow(g) {
-  return `<button class="row group" data-group="${esc(g.id)}"><span>${esc(g.name)}</span><span class="s">›</span><span></span></button>`;
+function groupNode(g) {
+  return `<li><details data-group="${esc(g.id)}"><summary>${esc(g.name)}</summary><ul class="kids"></ul></details></li>`;
 }
 
-function backRow() {
-  return trail.length ? `<button class="row group" data-back="1"><span>‹ Back</span><span></span><span></span></button>` : "";
+function gameLeaf(r, i) {
+  return `<li><button class="game" data-id="${esc(r.id)}"><em>${i + 1}</em><span>${esc(r.blue?.name || "Blue")}</span><b>${r.blue?.goals ?? "–"} : ${r.orange?.goals ?? "–"}</b><span>${esc(r.orange?.name || "Orange")}</span></button></li>`;
 }
 
-async function loadReplays(groupId, push = false) {
-  if (push) trail.push(groupId);
-  else if (!trail.length || trail[trail.length - 1] !== groupId) trail.length = 0, trail.push(groupId);
-  notify("Loading…");
+async function fillGroup(details) {
+  if (details.dataset.loaded) return;
+  details.dataset.loaded = "1";
+  const ul = details.querySelector(".kids");
+  ul.innerHTML = '<li class="hint">Loading…</li>';
+  const id = details.dataset.group;
   try {
-    const data = await api.get(`replays?group=${groupId}&sort-by=replay-date&sort-dir=desc&count=20`);
-    const list = data.list || [];
-    if (list.length) {
-      $("replays").innerHTML = backRow() + list.map(r => `<button class="row" data-id="${esc(r.id)}">
-        <span>${esc(r.blue?.name || "Blue")}</span><span class="s">${r.blue?.goals ?? "–"} : ${r.orange?.goals ?? "–"}</span><span class="a">${esc(r.orange?.name || "Orange")}</span></button>`).join("");
-      notify("");
-      showReplay(list[0].id);
-      return;
-    }
-    const kids = (await api.get(`groups?group=${groupId}&sort-by=created&sort-dir=desc&count=30`)).list || [];
-    $("replays").innerHTML = backRow() + kids.map(groupRow).join("");
-    notify(kids.length ? "Pick a stage or series." : "No replays in this group.");
-  } catch (e) { notify(e.message, true); }
+    const kids = (await api.get(`groups?group=${id}&sort-by=created&sort-dir=desc&count=50`)).list || [];
+    if (kids.length) { ul.innerHTML = kids.map(groupNode).join(""); return; }
+    const games = (await api.get(`replays?group=${id}&sort-by=replay-date&sort-dir=asc&count=50`)).list || [];
+    ul.innerHTML = games.length ? games.map(gameLeaf).join("") : '<li class="hint">No replays.</li>';
+  } catch (e) {
+    delete details.dataset.loaded;
+    ul.innerHTML = `<li class="hint err">${esc(e.message)}</li>`;
+  }
 }
 
-async function loadGroups() {
+const yearOf = g => (g.created || "").slice(0, 4) || (g.name.match(/20\d\d/) || ["Other"])[0];
+
+async function loadTree() {
   try {
     const cfg = await (await fetch("/api/config")).json();
     if (!cfg.hasToken) return notify("Server has no ballchasing token configured — only replay upload is available.", true);
-    const data = await api.get(`groups?creator=${cfg.creator}&sort-by=created&sort-dir=desc&count=12`);
-    $("groups").innerHTML = (data.list || []).map(g => `<button data-id="${esc(g.id)}">${esc(g.name)}</button>`).join("");
-    const first = $("groups").firstElementChild;
-    if (first) { first.classList.add("on"); loadReplays(first.dataset.id); }
-    else notify("No groups found.");
+    const list = (await api.get(`groups?creator=${cfg.creator}&sort-by=created&sort-dir=desc&count=50`)).list || [];
+    if (!list.length) return notify("No groups found.");
+    const byYear = {};
+    list.forEach(g => (byYear[yearOf(g)] ||= []).push(g));
+    $("tree").innerHTML = Object.keys(byYear).sort().reverse().map((y, i) =>
+      `<details class="year"${i === 0 ? " open" : ""}><summary>${esc(y)}</summary><ul class="kids">${byYear[y].map(groupNode).join("")}</ul></details>`).join("");
   } catch (e) { notify(e.message, true); }
 }
 
-$("groups").onclick = e => {
-  const b = e.target.closest("button");
+$("tree").addEventListener("toggle", e => {
+  if (e.target.open && e.target.dataset.group) fillGroup(e.target);
+}, true);
+
+$("tree").onclick = e => {
+  const b = e.target.closest(".game");
   if (!b) return;
-  [...$("groups").children].forEach(c => c.classList.toggle("on", c === b));
-  loadReplays(b.dataset.id);
+  $("tree").querySelectorAll(".game.on").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+  showReplay(b.dataset.id).then(() => $("out").scrollIntoView({ behavior: "smooth", block: "start" }));
 };
-$("replays").onclick = e => {
-  const b = e.target.closest(".row");
-  if (!b) return;
-  if (b.dataset.back) { trail.pop(); return loadReplays(trail.pop()); }
-  if (b.dataset.group) return loadReplays(b.dataset.group, true);
-  showReplay(b.dataset.id);
-};
+
 document.querySelector(".tabs").onclick = e => {
   const b = e.target.closest("button");
   if (!b) return;
@@ -144,4 +141,4 @@ drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]); };
 
-loadGroups();
+loadTree();
