@@ -18,5 +18,16 @@ Optional env: `PORT`, `RLCS_CREATOR_ID` (ballchasing account whose groups are li
 Any Node host works (Render, Railway, Fly.io): build command none, start command `npm start`,
 set `BALLCHASING_TOKEN` as a secret environment variable.
 
+## Match history
+
+Rankings and team game lists come from `data/games.json`, not from live API calls.
+`node sync.js` fetches only games newer than the last stored one and keeps 400 days.
+
+- First run: `BALLCHASING_TOKEN=your_token node sync.js`, then commit `data/games.json`.
+- Automatic: add the repo secret `BALLCHASING_TOKEN` (Settings → Secrets → Actions). The workflow in
+  `.github/workflows/sync.yml` syncs daily and commits the file, which redeploys the site.
+
+The event tree and single-game stats still call the API (cached for 5 minutes).
+
 Responses are cached in memory for 5 minutes to stay inside ballchasing rate limits.
 Credit ballchasing.com (and Liquipedia, if you add it) as the data source.

@@ -160,32 +160,70 @@ $("tree").onclick = e => {
 };
 
 let rankingRequest = 0;
+let rankState = { days: 30, limit: 10 };
 
-async function loadRanking(days) {
+async function loadRanking() {
   const ticket = ++rankingRequest;
   const body = $("rankbody");
-  body.innerHTML = '<p class="hint">Calculating… the first load can take a minute.</p>';
+  $("teamgames").innerHTML = "";
   try {
-    const res = await fetch("/api/rankings?days=" + days);
+    const res = await fetch(`/api/rankings?days=${rankState.days}&limit=${rankState.limit}`);
     const d = await res.json();
     if (ticket !== rankingRequest) return;
     if (!res.ok) throw new Error(d.error || "Rankings unavailable");
     const rows = d.teams.map((t, i) => {
       const pct = Math.round(t.winRate * 100);
-      return `<div class="rrow"><span class="rk">${i + 1}</span><span class="rn">${esc(t.name)}</span><span class="rg">${t.wins}–${t.games - t.wins}</span><span class="wr"><i style="width:${pct}%"></i><b>${pct}%</b></span></div>`;
+      return `<button class="rrow" data-team="${esc(t.name)}"><span class="rk">${i + 1}</span><span class="rn">${esc(t.name)}</span><span class="rg">${t.wins}–${t.games - t.wins}</span><span class="wr"><i style="width:${pct}%"></i><b>${pct}%</b></span></button>`;
     }).join("");
-    const note = `Minimum ${d.minGames} games${d.since ? ` · data only goes back to ${esc(d.since)}` : ""}`;
-    body.innerHTML = (rows || '<p class="hint">Not enough games in this period.</p>') + `<p class="hint">${note}</p>`;
+    const more = rankState.limit < 50 ? '<button id="more">Show top 50</button>' : '<button id="more">Show top 10</button>';
+    const updated = d.updatedAt ? ` · updated ${esc(d.updatedAt.slice(0, 10))}` : "";
+    body.innerHTML = (rows || '<p class="hint">Not enough games in this period.</p>') +
+      `<p class="hint">Minimum ${d.minGames} games${updated} · click a team for its games</p>${more}`;
   } catch (e) {
     if (ticket === rankingRequest) body.innerHTML = `<p class="hint err">${esc(e.message)}</p>`;
   }
 }
 
+async function loadTeamGames(team) {
+  const box = $("teamgames");
+  box.innerHTML = '<p class="hint">Loading…</p>';
+  try {
+    const res = await fetch(`/api/team-games?days=${rankState.days}&team=${encodeURIComponent(team)}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || "Games unavailable");
+    const pills = d.games.map(g => `<button class="game ${g.gf > g.ga ? "w" : "l"}" data-id="${esc(g.id)}" title="${esc(new Date(g.t).toISOString().slice(0, 10))}">${g.gf}–${g.ga} vs ${esc(g.opp)}</button>`).join("");
+    box.innerHTML = `<div class="tg"><b>${esc(team)}</b><div class="games">${pills || '<span class="hint">No games.</span>'}</div></div>`;
+  } catch (e) {
+    box.innerHTML = `<p class="hint err">${esc(e.message)}</p>`;
+  }
+}
+
+$("rankbody").onclick = e => {
+  if (e.target.id === "more") {
+    rankState.limit = rankState.limit < 50 ? 50 : 10;
+    return loadRanking();
+  }
+  const row = e.target.closest(".rrow");
+  if (!row) return;
+  $("rankbody").querySelectorAll(".rrow.on").forEach(x => x.classList.remove("on"));
+  row.classList.add("on");
+  loadTeamGames(row.dataset.team);
+};
+
+$("teamgames").onclick = e => {
+  const b = e.target.closest(".game");
+  if (!b) return;
+  $("teamgames").querySelectorAll(".game.on").forEach(x => x.classList.remove("on"));
+  b.classList.add("on");
+  showReplay(b.dataset.id).then(() => $("out").scrollIntoView({ behavior: "smooth", block: "start" }));
+};
+
 $("period").onclick = e => {
   const b = e.target.closest("button");
   if (!b) return;
   [...$("period").children].forEach(c => c.classList.toggle("on", c === b));
-  loadRanking(Number(b.dataset.days));
+  rankState.days = Number(b.dataset.days);
+  loadRanking();
 };
 
 document.querySelector(".tabs").onclick = e => {
@@ -209,4 +247,4 @@ drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]); };
 
 loadTree();
-loadRanking(30);
+loadRanking();

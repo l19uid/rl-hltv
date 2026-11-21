@@ -1,6 +1,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const { loadStore, rank, teamGames } = require("./store");
 
 const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.BALLCHASING_TOKEN || "";
@@ -9,10 +10,7 @@ const UPSTREAM = process.env.BALLCHASING_URL || "https://ballchasing.com/api/";
 const ALLOWED = /^(replays|groups)(\/[A-Za-z0-9-]+)?$/;
 const TTL_MS = 5 * 60 * 1000;
 const MIN_GAP_MS = Number(process.env.REQUEST_GAP_MS || 600);
-const DATASET_TTL_MS = 6 * 60 * 60 * 1000;
-const WINDOW_DAYS = 365;
-const MAX_PAGES = 40;
-const DAY_MS = 86400000;
+const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, "data", "games.json");
 const PERIODS = [30, 180, 365];
 const PUBLIC = path.join(__dirname, "public");
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
@@ -64,67 +62,25 @@ async function proxy(res, upstreamPath, search) {
   }
 }
 
-let dataset = null;
-let loading = null;
+let storeCache = { mtime: 0, store: null };
 
-async function fetchGames() {
-  const since = new Date(Date.now() - WINDOW_DAYS * DAY_MS).toISOString();
-  let url = `${UPSTREAM}replays?uploader=${CREATOR}&replay-date-after=${encodeURIComponent(since)}&sort-by=replay-date&sort-dir=desc&count=200`;
-  const games = [];
-  let pages = 0;
-  let truncated = false;
-  while (url) {
-    if (pages++ >= MAX_PAGES) { truncated = true; break; }
-    const data = await upstreamJson(url);
-    for (const r of data.list || []) {
-      games.push({ t: Date.parse(r.date || r.created), b: r.blue?.name, o: r.orange?.name, bg: r.blue?.goals, og: r.orange?.goals });
-    }
-    url = data.next && data.next.startsWith(UPSTREAM) ? data.next : null;
-  }
-  return { games, truncated, oldest: games.length ? games[games.length - 1].t : null, loadedAt: Date.now() };
-}
-
-async function getDataset() {
-  if (dataset && Date.now() - dataset.loadedAt < DATASET_TTL_MS) return dataset;
-  loading ||= fetchGames()
-    .then(data => (dataset = data))
-    .finally(() => { loading = null; });
-  return loading;
-}
-
-function rank(data, days) {
-  const cutoff = Date.now() - days * DAY_MS;
-  const teams = new Map();
-  const tally = (name, won) => {
-    const t = teams.get(name) || { name, games: 0, wins: 0 };
-    t.games++;
-    if (won) t.wins++;
-    teams.set(name, t);
-  };
-  for (const g of data.games) {
-    if (!(g.t >= cutoff) || !g.b || !g.o || g.bg == null || g.og == null || g.bg === g.og) continue;
-    tally(g.b, g.bg > g.og);
-    tally(g.o, g.og > g.bg);
-  }
-  const minGames = Math.max(6, Math.round(days / 12));
-  const list = [...teams.values()]
-    .filter(t => t.games >= minGames)
-    .map(t => ({ ...t, winRate: t.wins / t.games }))
-    .sort((a, b) => b.winRate - a.winRate || b.games - a.games)
-    .slice(0, 10);
-  const partial = data.truncated && data.oldest > cutoff;
-  return { days, minGames, teams: list, since: partial ? new Date(data.oldest).toISOString().slice(0, 10) : null };
-}
-
-async function rankings(res, search) {
-  if (!TOKEN) return send(res, 503, { error: "BALLCHASING_TOKEN is not configured" });
-  const days = Number(new URLSearchParams(search).get("days"));
-  if (!PERIODS.includes(days)) return send(res, 400, { error: "days must be 30, 180 or 365" });
+function currentStore() {
   try {
-    send(res, 200, rank(await getDataset(), days));
-  } catch (err) {
-    send(res, 502, { error: err.message });
+    const mtime = fs.statSync(DATA_FILE).mtimeMs;
+    if (mtime !== storeCache.mtime) storeCache = { mtime, store: loadStore(DATA_FILE) };
+  } catch {
+    storeCache = { mtime: 0, store: null };
   }
+  return storeCache.store;
+}
+
+function fromStore(res, search, build) {
+  const store = currentStore();
+  if (!store) return send(res, 503, { error: "No match history yet — run `node sync.js` or the Sync workflow." });
+  const params = new URLSearchParams(search);
+  const days = Number(params.get("days"));
+  if (!PERIODS.includes(days)) return send(res, 400, { error: "days must be 30, 180 or 365" });
+  send(res, 200, build(store, days, params));
 }
 
 function serveStatic(res, pathname) {
@@ -142,7 +98,12 @@ http
     const url = new URL(req.url, "http://localhost");
     if (req.method !== "GET") return send(res, 405, { error: "method not allowed" });
     if (url.pathname === "/api/config") return send(res, 200, { creator: CREATOR, hasToken: Boolean(TOKEN) });
-    if (url.pathname === "/api/rankings") return rankings(res, url.search);
+    if (url.pathname === "/api/rankings") {
+      return fromStore(res, url.search, (store, days, p) => rank(store, days, Math.min(Number(p.get("limit")) || 10, 50)));
+    }
+    if (url.pathname === "/api/team-games") {
+      return fromStore(res, url.search, (store, days, p) => ({ games: teamGames(store, p.get("team") || "", days) }));
+    }
     if (url.pathname.startsWith("/api/ballchasing/")) {
       return proxy(res, url.pathname.slice("/api/ballchasing/".length), url.search);
     }

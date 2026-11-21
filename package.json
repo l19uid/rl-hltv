@@ -2,6 +2,6 @@
   "name": "rl-replay-site",
   "version": "1.0.0",
   "private": true,
-  "scripts": { "start": "node server.js" },
+  "scripts": { "start": "node server.js", "sync": "node sync.js" },
   "engines": { "node": ">=18" }
 }
