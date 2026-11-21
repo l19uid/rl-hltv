@@ -15,7 +15,7 @@ function request(url) {
 async function getJson(url) {
   for (let attempt = 1; attempt <= 4; attempt++) {
     const res = await request(url);
-    if (res.status === 429) { await sleep(2000 * attempt); continue; }
+    if (res.status === 429 || res.status >= 500) { await sleep(2000 * attempt); continue; }
     if (!res.ok) throw new Error(`ballchasing returned ${res.status}`);
     return res.json();
   }

@@ -31,7 +31,11 @@ async function proxy(res, upstreamPath, search) {
   if (hit && hit.expires > Date.now()) return send(res, 200, hit.body, { "X-Cache": "HIT" });
 
   try {
-    const response = await request(BASE + upstreamPath + search);
+    let response = await request(BASE + upstreamPath + search);
+    for (let attempt = 1; attempt <= 3 && (response.status === 429 || response.status >= 500); attempt++) {
+      await new Promise(r => setTimeout(r, 1500 * attempt));
+      response = await request(BASE + upstreamPath + search);
+    }
     const body = await response.text();
     if (response.ok) cache.set(key, { body, expires: Date.now() + TTL_MS });
     send(res, response.status, body, { "X-Cache": "MISS" });
