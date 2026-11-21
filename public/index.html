@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rocket League Match Stats</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>Rocket League · Match Stats</h1>
+  <nav class="tabs"><button data-tab="pro" class="on">Pro games</button><button data-tab="upload">Upload replay</button></nav>
+
+  <section id="pro">
+    <div id="groups" class="chips"></div>
+    <div id="replays" class="list"></div>
+  </section>
+
+  <section id="upload" hidden>
+    <div class="drop" id="drop">Drop a <b>.replay</b> file here<button id="pick">Browse</button><input type="file" id="file" accept=".replay" hidden></div>
+  </section>
+
+  <div id="msg"></div>
+  <div id="out"></div>
+  <p class="foot">Pro data: ballchasing.com. Uploaded files are parsed in your browser and never sent anywhere.</p>
+</div>
+<script src="parser.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
