@@ -9,7 +9,6 @@
 <body>
 <div class="wrap">
   <h1>Rocket League · Match Stats</h1>
-  <nav class="tabs"><button data-tab="pro" class="on">Pro games</button><button data-tab="upload">Upload replay</button></nav>
 
   <section id="pro">
     <div class="chips" id="modes"><button data-mode="3" class="on">3v3</button><button data-mode="2">2v2</button><button data-mode="1">1v1</button></div>
@@ -27,15 +26,10 @@
     <div id="tourneys"></div>
   </section>
 
-  <section id="upload" hidden>
-    <div class="drop" id="drop">Drop a <b>.replay</b> file here<button id="pick">Browse</button><input type="file" id="file" accept=".replay" hidden></div>
-  </section>
-
   <div id="msg"></div>
   <div id="out"></div>
-  <p class="foot">Pro data: ballchasing.com. Uploaded files are parsed in your browser and never sent anywhere.</p>
+  <p class="foot">Pro data: ballchasing.com.</p>
 </div>
-<script src="parser.js"></script>
 <script src="prating.js"></script>
 <script src="app.js"></script>
 </body>

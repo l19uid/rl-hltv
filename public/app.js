@@ -126,7 +126,7 @@ async function loadRanking() {
     }).join("");
     const more = rankState.limit < 50 ? '<button id="more">Show top 50</button>' : '<button id="more">Show top 10</button>';
     const updated = d.updatedAt ? ` · updated ${esc(d.updatedAt.slice(0, 10))}` : "";
-    body.innerHTML = (rows || '<p class="hint">Not enough series in this period.</p>') +
+    body.innerHTML = (rows || `<p class="hint">Not enough series in this period.${d.latest ? ` Newest data is from ${esc(new Date(d.latest).toISOString().slice(0, 10))}.` : ""} <a href="/api/status" target="_blank">Data status</a></p>`) +
       `<p class="hint">Points: prize-weighted rating from every series since the history starts. W–L = series in this period, minimum ${d.minSeries}. * = fewer than 8 series so far${updated}.</p>${more}`;
   } catch (e) {
     if (ticket === rankingRequest) body.innerHTML = `<p class="hint err">${esc(e.message)}</p>`;
@@ -259,26 +259,6 @@ $("modes").onclick = e => {
   loadPlayers();
   loadTournaments();
 };
-
-document.querySelector(".tabs").onclick = e => {
-  const b = e.target.closest("button");
-  if (!b) return;
-  document.querySelectorAll(".tabs button").forEach(t => t.classList.toggle("on", t === b));
-  $("pro").hidden = b.dataset.tab !== "pro";
-  $("upload").hidden = b.dataset.tab !== "upload";
-};
-
-function loadFile(file) {
-  file.arrayBuffer().then(async buf => {
-    try { renderMatch(await withRatings(parseReplayFile(buf))); notify(""); } catch (e) { notify(e.message, true); }
-  });
-}
-const drop = $("drop"), input = $("file");
-$("pick").onclick = () => input.click();
-input.onchange = () => input.files[0] && loadFile(input.files[0]);
-drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
-drop.ondragleave = () => drop.classList.remove("over");
-drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]); };
 
 loadRanking();
 loadPlayers();

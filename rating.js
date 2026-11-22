@@ -23,6 +23,11 @@ function prizeFor(prizes, name, mode) {
 
 const weight = usd => Math.min(2, Math.max(0.3, (Math.log10(Math.max(usd, 1000)) - 3) / 2));
 
+function nameFallback(name) {
+  const m = /^(?:series\s*\d+\s*[:\-–]?\s*)?(.+?)\s+(\d+)\s*[-–]\s*(\d+)\s+(.+)$/i.exec((name || "").trim());
+  return m ? { a: m[1].trim(), b: m[4].trim(), wa: Number(m[2]), wb: Number(m[3]) } : null;
+}
+
 function buildSeries(games, names) {
   const map = new Map();
   for (const g of games) {
@@ -36,8 +41,18 @@ function buildSeries(games, names) {
     if (g.orange) s.teams.add(g.orange);
   }
   const out = [];
+  const stats = { seen: map.size, named: 0, fromGroupName: 0 };
   for (const s of map.values()) {
+    if (s.teams.size === 0) {
+      const f = nameFallback(s.name);
+      if (!f) continue;
+      s.games.sort((x, y) => x.t - y.t);
+      stats.fromGroupName++;
+      out.push({ id: s.id, tid: s.tid, mode: s.mode, name: s.name, t: s.t, a: f.a, b: f.b, wa: f.wa, wb: f.wb, games: s.games.map(g => ({ id: g.id, a: g.bg, b: g.og })), winner: f.wa === f.wb ? null : f.wa > f.wb ? f.a : f.b });
+      continue;
+    }
     if (s.teams.size !== 2) continue;
+    stats.named++;
     const [a, b] = [...s.teams];
     s.games.sort((x, y) => x.t - y.t);
     let wa = 0, wb = 0;
@@ -52,7 +67,9 @@ function buildSeries(games, names) {
     }
     out.push({ id: s.id, tid: s.tid, mode: s.mode, name: s.name, t: s.t, a, b, wa, wb, games, winner: wa === wb ? null : wa > wb ? a : b });
   }
-  return out.sort((x, y) => x.t - y.t);
+  out.sort((x, y) => x.t - y.t);
+  out.stats = stats;
+  return out;
 }
 
 function computeState(games, names, prizes) {
@@ -105,10 +122,12 @@ function computeState(games, names, prizes) {
     }
   }
 
-  return { tournaments, teams };
+  const latest = series.length ? series[series.length - 1].t : 0;
+  return { tournaments, teams, latest, stats: { ...series.stats, usable: series.length, decided: series.filter(s => s.winner).length } };
 }
 
 function rankings(state, mode, days, limit, now = Date.now()) {
+  now = Math.min(now, state.latest || now);
   const cutoff = now - days * DAY_MS;
   const minSeries = days <= 30 ? 2 : days <= 180 ? 4 : 6;
   const list = [];
@@ -121,7 +140,7 @@ function rankings(state, mode, days, limit, now = Date.now()) {
     list.push({ name: team.name, points: Math.round(points), wins, losses: window.length - wins, provisional: team.series < PROVISIONAL_SERIES });
   }
   list.sort((a, b) => b.points - a.points || b.wins - a.wins);
-  return { mode, days, minSeries, teams: list.slice(0, limit) };
+  return { mode, days, minSeries, latest: state.latest || null, teams: list.slice(0, limit) };
 }
 
 function tournamentList(state, mode) {

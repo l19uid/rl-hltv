@@ -68,7 +68,7 @@ function openDb(file) {
     markCrawled: id => markCrawled.run(id),
     getMeta: key => getMeta.get(key)?.value ?? null,
     setMeta: (key, value) => setMeta.run(key, value),
-    teamGames: (team, mode, days, limit = 100) => teamStmt.all({ team, mode, cutoff: Date.now() - days * DAY_MS, limit }),
+    teamGames: (team, mode, days, ref = Date.now(), limit = 100) => teamStmt.all({ team, mode, cutoff: ref - days * DAY_MS, limit }),
   };
 }
 

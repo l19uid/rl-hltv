@@ -6,12 +6,7 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 system-ui,-ap
 .wrap{max-width:900px;margin:0 auto;padding:16px}
 h1{font-size:15px;letter-spacing:.12em;text-transform:uppercase;color:var(--mute);margin:4px 0 14px}
 button{font:inherit;color:var(--text);background:var(--head);border:1px solid var(--line);border-radius:5px;padding:6px 12px;cursor:pointer}
-.tabs{display:flex;gap:6px;margin-bottom:12px}
-.tabs .on,.chips .on{background:var(--blue);border-color:var(--blue);color:#fff}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
-.drop{border:2px dashed var(--line);border-radius:8px;padding:22px;text-align:center;color:var(--mute);background:var(--panel)}
-.drop.over{border-color:var(--blue);color:var(--text)}
-.drop button{margin-left:8px}
 #msg{margin:10px 0;color:var(--mute)}#msg.err{color:var(--loss)}
 .match{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-top:16px;overflow:hidden}
 .meta{display:flex;flex-wrap:wrap;gap:6px 18px;padding:10px 16px;background:var(--head);color:var(--mute);font-size:12px}

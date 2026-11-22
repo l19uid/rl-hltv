@@ -69,6 +69,7 @@ function buildMode(rows) {
 function computePlayers(rows) {
   const byMode = {};
   for (const mode of [1, 2, 3]) byMode[mode] = buildMode(rows.filter(r => r.mode === mode));
+  byMode.latest = rows.reduce((m, r) => Math.max(m, r.t || 0), 0);
   return byMode;
 }
 
@@ -80,6 +81,7 @@ function baseline(state, mode) {
 function leaderboard(state, mode, days, limit, now = Date.now()) {
   const m = state[mode];
   const minGames = days <= 30 ? 6 : days <= 180 ? 12 : 20;
+  now = Math.min(now, state.latest || now);
   const cutoff = now - days * DAY_MS;
   const players = [];
   for (const prs of groupBy(m.rows.filter(r => r.t >= cutoff), r => r.pid).values()) {
@@ -94,7 +96,7 @@ function leaderboard(state, mode, days, limit, now = Date.now()) {
     players.push({ name: latest.name, games: a.games, rating: Math.round(rating * 100) / 100, goals: pg.goals, assists: pg.assists, saves: pg.saves });
   }
   players.sort((x, y) => y.rating - x.rating || y.games - x.games);
-  return { mode, days, minGames, players: players.slice(0, limit) };
+  return { mode, days, minGames, latest: state.latest || null, players: players.slice(0, limit) };
 }
 
 module.exports = { computePlayers, baseline, leaderboard };

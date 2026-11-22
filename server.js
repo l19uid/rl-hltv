@@ -110,6 +110,19 @@ http
     const url = new URL(req.url, "http://localhost");
     if (req.method !== "GET") return send(res, 405, { error: "method not allowed" });
     if (url.pathname === "/api/config") return send(res, 200, { creator: CREATOR, hasToken: Boolean(TOKEN) });
+    if (url.pathname === "/api/status") {
+      const games = db.allGames();
+      return send(res, 200, {
+        games: games.length,
+        gamesWithTeamNames: games.filter(g => g.blue && g.orange).length,
+        playerRows: db.allPlayers().length,
+        newestGame: games.length ? new Date(Math.max(...games.map(g => g.t))).toISOString() : null,
+        series: state.stats,
+        lastSync: db.getMeta("lastSync"),
+        syncing: syncState.running,
+        syncError: syncState.error,
+      });
+    }
     if (url.pathname === "/api/rankings") {
       return fromState(res, url.search, (mode, p) => rankings(state, mode, periodOf(p), Math.min(Number(p.get("limit")) || 10, 50)));
     }
@@ -126,7 +139,7 @@ http
       return fromState(res, url.search, mode => baseline(playerState, mode));
     }
     if (url.pathname === "/api/team-games") {
-      return fromState(res, url.search, (mode, p) => ({ games: db.teamGames(p.get("team") || "", mode, periodOf(p)) }));
+      return fromState(res, url.search, (mode, p) => ({ games: db.teamGames(p.get("team") || "", mode, periodOf(p), Math.min(Date.now(), state.latest || Date.now())) }));
     }
     if (url.pathname.startsWith("/api/ballchasing/")) {
       return proxy(res, url.pathname.slice("/api/ballchasing/".length), url.search);

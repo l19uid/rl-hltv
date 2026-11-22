@@ -4,7 +4,6 @@ Match scoreboards in an HLTV-style layout.
 
 - **Pro games**: top teams by win rate (1 month / 6 months / 1 year), team game lists and an
   event browser, from the ballchasing.com API.
-- **Upload**: drop a `.replay` file; it is parsed in the browser and never uploaded.
 
 ## Run
 
