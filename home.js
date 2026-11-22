@@ -84,7 +84,7 @@ function buildHome({ state, playerState, schedule, mode, days, teamLimit, now = 
       gameWins: rec.wins,
       gameLosses: rec.losses,
       titles: (titles.get(t.name) || []).sort((a, b) => b.end - a.end).map(x => x.title),
-      roster: (rosterByTeam.get(t.name) || []).sort((a, b) => b.games - a.games).slice(0, mode).map(p => ({ name: p.name, rating: p.rating, games: p.games })),
+      roster: (rosterByTeam.get(t.name) || []).sort((a, b) => b.games - a.games).slice(0, mode).map(p => ({ pid: p.pid, name: p.name, rating: p.rating, games: p.games })),
     };
   });
 

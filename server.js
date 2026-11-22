@@ -6,6 +6,7 @@ const { openDb } = require("./db");
 const { syncNow } = require("./sync");
 const { computePlayers, baseline } = require("./players");
 const { buildHome, loadSchedule } = require("./home");
+const { buildProfile } = require("./profile");
 const { loadPrizes, computeState, rankings, tournamentList, tournamentDetail } = require("./rating");
 
 const PORT = process.env.PORT || 3000;
@@ -144,6 +145,9 @@ http
     }
     if (url.pathname === "/api/tournament") {
       return fromState(res, url.search, (mode, p) => tournamentDetail(state, p.get("id") || "", mode));
+    }
+    if (url.pathname === "/api/player") {
+      return fromState(res, url.search, (mode, p) => buildProfile({ state, playerState, mode, pid: p.get("pid") || "" }));
     }
     if (url.pathname === "/api/player-baseline") {
       return fromState(res, url.search, mode => baseline(playerState, mode));

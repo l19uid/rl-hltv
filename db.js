@@ -37,7 +37,7 @@ function openDb(file) {
   const prunePlayers = db.prepare("DELETE FROM playerstats WHERE t < ?");
   const upsertPlayer = db.prepare("INSERT OR REPLACE INTO playerstats (series, pid, mode, tid, name, t, games, goals, assists, saves, shots, score, demos) VALUES (@series, @pid, @mode, @tid, @name, @t, @games, @goals, @assists, @saves, @shots, @score, @demos)");
   const upsertPlayers = db.transaction(rows => rows.forEach(r => upsertPlayer.run(r)));
-  const allPlayers = db.prepare("SELECT series, pid, mode, name, t, games, goals, assists, saves, shots, score, demos FROM playerstats");
+  const allPlayers = db.prepare("SELECT series, pid, mode, tid, name, t, games, goals, assists, saves, shots, score, demos FROM playerstats");
   const count = db.prepare("SELECT COUNT(*) AS n FROM games");
   const all = db.prepare("SELECT id, t, blue, orange, bg, og, series, tid, mode FROM games");
   const groups = db.prepare("SELECT id, name FROM groups");

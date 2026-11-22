@@ -49,6 +49,12 @@ Ballchasing only has games that were already played, so upcoming events come fro
 edit by hand (copy them from Liquipedia). Entries in the past are hidden automatically and the file is read on
 every page load, so no restart is needed. `mode` (3, 2 or 1) is optional.
 
+## Player profiles
+
+Click any player name to open a profile: team, rating for 1 month / 6 months / 1 year, average per-game stats compared with the league, recent series with their games, and achievements. Served by `/api/player?mode=&pid=`, built in `profile.js`.
+
+Achievements are derived from the data: Champion and Runner-up (the player appeared in the tournament's last series), Tournament MVP (best rating at an event, at least 10 games and 6 rated players), Amazing form (1.5+ over a period), Best series (1.5+), and games-tracked milestones. A player's team in each series is the team they share the most nearby series with (within 90 days), so transfers show correctly.
+
 ## Team rosters
 
 The data has no team for each player, so rosters are inferred: a player belongs to the team that appears in

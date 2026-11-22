@@ -24,13 +24,14 @@ const api = {
 const panel = (id, html) => { $(id).querySelector(".body").innerHTML = html; };
 const empty = text => `<p class="hint">${text}</p>`;
 const ratingBadge = r => r == null ? "–" : `<span class="rt ${PlayerRating.band(r)}">${r.toFixed(2)}</span>`;
+const playerLink = (name, pid, mode, cls = "") => pid ? `<button class="plink ${cls}" data-pid="${esc(pid)}" data-mode="${mode}">${esc(name)}</button>` : `<span class="${cls}">${esc(name)}</span>`;
 const gamePills = games => games.map(g => `<button class="game" data-id="${esc(g.id)}">${g.a ?? "–"}–${g.b ?? "–"}</button>`).join("");
 
 /* ---------- scoreboard dialog ---------- */
 
 function fromBallchasing(r) {
   const side = (t, team) => (t.players || []).map(p => ({
-    name: p.name, team, platform: p.id?.platform || "",
+    name: p.name, team, platform: p.id?.platform || "", pid: p.id?.id ? `${p.id.platform}:${p.id.id}` : null,
     score: p.stats?.core?.score ?? 0, goals: p.stats?.core?.goals ?? 0, assists: p.stats?.core?.assists ?? 0,
     saves: p.stats?.core?.saves ?? 0, shots: p.stats?.core?.shots ?? 0, demos: p.stats?.demo?.inflicted ?? null,
   }));
@@ -67,7 +68,7 @@ function teamTable(m, team, label, cls, mvp, showDemos) {
   const rows = ps.map(p => {
     const pct = p.shots ? Math.round(p.goals / p.shots * 100) + "%" : "–";
     const cells = [p.goals, p.assists, p.saves, p.shots, pct].concat(showDemos ? [p.demos ?? "–"] : []).concat(showRating ? [ratingBadge(p.rating)] : []);
-    return `<tr><td class="name">${esc(p.name)}${p === mvp ? '<span class="star" title="Top score">★</span>' : ""}<span class="pf">${esc(p.platform)}</span></td>
+    return `<tr><td class="name">${playerLink(p.name, p.pid, Math.min(3, Math.max(1, m.size || 3)))}${p === mvp ? '<span class="star" title="Top score">★</span>' : ""}<span class="pf">${esc(p.platform)}</span></td>
       <td class="${p === mvp ? "top1" : ""}"><span class="bar" style="width:${Math.round(p.score / max * 60)}px;background:var(--${cls})"></span>${p.score}</td>
       ${cells.map(c => `<td>${c}</td>`).join("")}</tr>`;
   }).join("");
@@ -88,16 +89,83 @@ function renderMatch(m) {
     ${teamTable(m, 0, m.blueName, "blue", mvp, showDemos)}${teamTable(m, 1, m.orangeName, "orange", mvp, showDemos)}`;
 }
 
-async function openMatch(id) {
-  const dlg = $("dlg");
-  $("out").innerHTML = '<p class="hint" style="padding:18px">Loading match…</p>';
-  if (!dlg.open) dlg.showModal();
+const nav = [];
+
+function present(view) {
+  nav.push(view);
+  $("dlg-back").hidden = nav.length < 2;
+  if (!$("dlg").open) $("dlg").showModal();
+  return view();
+}
+
+function goBack() {
+  nav.pop();
+  $("dlg-back").hidden = nav.length < 2;
+  if (nav.length) nav[nav.length - 1]();
+}
+
+const loadingView = text => { $("out").innerHTML = `<p class="hint" style="padding:18px">${text}</p>`; };
+const errorView = e => { $("out").innerHTML = `<p class="hint err" style="padding:18px">${esc(e.message)}</p>`; };
+
+const openMatch = id => present(async () => {
+  loadingView("Loading match…");
   try {
     renderMatch(await withRatings(fromBallchasing(await api.get("replays/" + id))));
   } catch (e) {
-    $("out").innerHTML = `<p class="hint err" style="padding:18px">${esc(e.message)}</p>`;
+    errorView(e);
   }
+});
+
+/* ---------- player profile ---------- */
+
+const STAT_LABELS = [["goals", "Goals"], ["assists", "Assists"], ["saves", "Saves"], ["shots", "Shots"], ["score", "Score"], ["demos", "Demos"]];
+const RATING_PERIODS = [[30, "1 month"], [180, "6 months"], [365, "1 year"]];
+
+function delta(value, mean) {
+  if (value == null || !mean) return "";
+  const pct = Math.round((value / mean - 1) * 100);
+  return `<span class="${pct > 0 ? "win" : pct < 0 ? "loss" : "draw"}">${pct > 0 ? "+" : ""}${pct}%</span>`;
 }
+
+function renderProfile(p) {
+  const ratings = RATING_PERIODS.map(([days, label]) => {
+    const r = p.ratings[days];
+    return `<div class="pr-box"><span>${label}</span>${r ? ratingBadge(Math.round(r.rating * 100) / 100) : '<span class="pr-na">–</span>'}<small>${r ? `${r.games} games` : "no games"}</small></div>`;
+  }).join("");
+  const stats = STAT_LABELS.filter(([k]) => p.averages[k] != null).map(([k, label]) =>
+    `<div class="pr-stat"><b>${p.averages[k].toFixed(k === "score" ? 0 : 2)}</b><span>${label}</span>${delta(p.averages[k], p.league[k])}</div>`).join("");
+  const recent = p.recent.map(r => {
+    const vs = r.opp ? `vs ${esc(r.opp)}` : `${esc(r.a)} vs ${esc(r.b)}`;
+    const score = r.opp ? (r.team === r.a ? `${r.wa}–${r.wb}` : `${r.wb}–${r.wa}`) : `${r.wa}–${r.wb}`;
+    const line = [["G", r.perGame.goals], ["A", r.perGame.assists], ["Sv", r.perGame.saves]].filter(x => x[1] != null).map(x => `${x[0]} ${x[1].toFixed(1)}`).join("  ");
+    return `<div class="pr-row">
+      <div class="pr-main"><b class="${r.won === true ? "win" : r.won === false ? "loss" : ""}">${r.won === true ? "W" : r.won === false ? "L" : "–"}</b><span class="pr-vs"><span>${vs} <em>${score}</em></span><small>${esc(r.event)}, ${dateOf(r.t)}</small></span>${ratingBadge(r.rating)}</div>
+      <div class="pr-line">${line ? `<span>${line} per game</span>` : ""}</div>
+      <div class="games">${gamePills(r.games)}</div></div>`;
+  }).join("");
+  const ach = p.achievements.map(a => `<li><b>${esc(a.label)}</b><span>${esc(a.detail)}</span>${a.t ? `<small>${dateOf(a.t)}</small>` : ""}</li>`).join("");
+  const rec = p.seriesRecord.wins + p.seriesRecord.losses;
+  $("out").innerHTML = `<div class="pr-head">
+      <h2>${esc(p.name)}</h2>
+      <div class="pr-sub">${p.team ? `<b>${esc(p.team)}</b>` : "Team not identified"}<span>${p.mode}v${p.mode}</span><span>${p.games} games tracked</span>${rec ? `<span>${p.seriesRecord.wins}–${p.seriesRecord.losses} in series</span>` : ""}</div>
+    </div>
+    <section class="pr-sec"><h3>Rating</h3><div class="pr-ratings">${ratings}</div></section>
+    <section class="pr-sec"><h3>Average performance <small>per game, with the difference from the league average</small></h3><div class="pr-stats">${stats || '<p class="hint">No stats yet.</p>'}</div></section>
+    <section class="pr-sec"><h3>Recent games</h3>${recent || '<p class="hint">No recent series.</p>'}</section>
+    <section class="pr-sec"><h3>Achievements</h3>${ach ? `<ul class="pr-ach">${ach}</ul>` : '<p class="hint">No achievements yet.</p>'}</section>`;
+}
+
+const openPlayer = (pid, mode) => present(async () => {
+  loadingView("Loading player…");
+  try {
+    const res = await fetch(`/api/player?mode=${mode}&pid=${encodeURIComponent(pid)}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || "Player not found");
+    renderProfile(d);
+  } catch (e) {
+    errorView(e);
+  }
+});
 
 /* ---------- dashboard panels ---------- */
 
@@ -109,7 +177,7 @@ function renderBest(p) {
   panel("best", `<div class="meter"><div class="num ${band}">${p.rating.toFixed(2)}</div>
       <div class="gauge" aria-hidden="true"><i class="fill ${band}" style="width:${pct}%"></i><b class="avg"></b></div>
       <div class="scale"><span>0</span><span>1.0 average</span><span>2</span></div></div>
-    <div class="best-name">${esc(p.name)}</div>
+    <div class="best-name">${playerLink(p.name, p.pid, state.mode)}</div>
     <div class="best-team">${esc(p.team || "")}</div>
     <div class="best-stats">
       <div class="stat"><b>${f(p.goals)}</b><span>goals</span></div>
@@ -121,7 +189,7 @@ function renderBest(p) {
 
 function renderPlayers(list, minGames) {
   if (!list.length) return panel("players", empty(`Players need at least ${minGames} games in this period to be rated.`));
-  panel("players", list.map((p, i) => `<div class="prow"><span class="rk">${i + 1}</span><span><span class="pn">${esc(p.name)}</span><span class="pt">${esc(p.team || "")}</span></span>${ratingBadge(p.rating)}</div>`).join(""));
+  panel("players", list.map((p, i) => `<div class="prow"><span class="rk">${i + 1}</span><span>${playerLink(p.name, p.pid, state.mode, "pn")}<span class="pt">${esc(p.team || "")}</span></span>${ratingBadge(p.rating)}</div>`).join(""));
 }
 
 function renderTeams(teams, d) {
@@ -133,7 +201,7 @@ function renderTeams(teams, d) {
     const total = t.gameWins + t.gameLosses;
     const pct = total ? Math.round(t.gameWins / total * 100) : 0;
     const roster = t.roster.length
-      ? t.roster.map(p => `<li>${esc(p.name)}${ratingBadge(p.rating)}</li>`).join("")
+      ? t.roster.map(p => `<li>${playerLink(p.name, p.pid, state.mode)}${ratingBadge(p.rating)}</li>`).join("")
       : '<li class="none">Players not identified yet</li>';
     return `<article class="team" data-team="${esc(t.name)}">
       <button class="team-head" aria-expanded="false"><span class="rk">${i + 1}</span><h3>${esc(t.name)}</h3><span class="pts">${t.points}${t.provisional ? "*" : ""}<small>points</small></span></button>
@@ -322,6 +390,8 @@ $("period").onclick = e => {
 };
 
 document.addEventListener("click", e => {
+  const link = e.target.closest(".plink");
+  if (link) return openPlayer(link.dataset.pid, link.dataset.mode);
   const game = e.target.closest(".game");
   if (game && game.dataset.id) return openMatch(game.dataset.id);
   const more = e.target.closest("[data-more]");
@@ -336,6 +406,8 @@ document.addEventListener("click", e => {
 });
 
 $("dlg-x").onclick = () => $("dlg").close();
+$("dlg-back").onclick = goBack;
+$("dlg").addEventListener("close", () => { nav.length = 0; $("dlg-back").hidden = true; });
 $("dlg").addEventListener("click", e => { if (e.target === $("dlg")) $("dlg").close(); });
 
 fetch("/api/config").then(r => r.json()).then(c => {

@@ -1,4 +1,4 @@
-const { composite } = require("./public/prating.js");
+const { composite, toRating } = require("./public/prating.js");
 
 const DAY_MS = 86400000;
 const KEYS = ["goals", "assists", "saves", "shots", "demos", "score"];
@@ -78,21 +78,34 @@ function baseline(state, mode) {
   return { mode, means: m.means, mu: m.mu, sigma: m.sigmaGame };
 }
 
+function ratingFor(m, prs) {
+  const a = aggregate(prs);
+  if (!a.games) return null;
+  const pg = perGame(a);
+  const c = composite(pg, m.means);
+  if (c == null) return null;
+  const shrink = a.games / (a.games + SHRINK_GAMES);
+  return { games: a.games, pg, rating: Math.max(0, 1 + 0.25 * ((c - m.muPlayers) / m.sigmaPlayers) * shrink) };
+}
+
+function seriesRating(m, row) {
+  if (!row.games) return null;
+  const pg = {};
+  for (const k of KEYS) pg[k] = row[k] != null ? row[k] / row.games : null;
+  const c = composite(pg, m.means);
+  return c == null ? null : toRating(c, m.mu, m.sigmaGame);
+}
+
 function playerTable(state, mode, days, now = Date.now()) {
   const m = state[mode];
   now = Math.min(now, state.latest || now);
   const cutoff = now - days * DAY_MS;
   const out = [];
   for (const [pid, prs] of groupBy(m.rows.filter(r => r.t >= cutoff), r => r.pid)) {
-    const a = aggregate(prs);
-    if (!a.games) continue;
-    const pg = perGame(a);
-    const c = composite(pg, m.means);
-    if (c == null) continue;
-    const shrink = a.games / (a.games + SHRINK_GAMES);
-    const rating = Math.max(0, 1 + 0.25 * ((c - m.muPlayers) / m.sigmaPlayers) * shrink);
+    const r = ratingFor(m, prs);
+    if (!r) continue;
     const latest = prs.reduce((x, y) => (y.t > x.t ? y : x));
-    out.push({ pid, name: latest.name, games: a.games, rating: Math.round(rating * 100) / 100, goals: pg.goals, assists: pg.assists, saves: pg.saves });
+    out.push({ pid, name: latest.name, games: r.games, rating: Math.round(r.rating * 100) / 100, goals: r.pg.goals, assists: r.pg.assists, saves: r.pg.saves });
   }
   return out;
 }
@@ -105,4 +118,4 @@ function leaderboard(state, mode, days, limit, now = Date.now()) {
   return { mode, days, minGames, latest: state.latest || null, players: players.slice(0, limit) };
 }
 
-module.exports = { computePlayers, baseline, leaderboard, playerTable };
+module.exports = { computePlayers, baseline, leaderboard, playerTable, ratingFor, seriesRating, groupBy };
