@@ -78,6 +78,7 @@ async function walk(db, g, ctx, now) {
   }
   db.markCrawled(g.id);
   ctx.stats.groups++;
+  if (ctx.stats.groups % 15 === 0) ctx.stats.onProgress(ctx.stats.groups);
 }
 
 async function syncNow(db, now = Date.now(), onProgress = () => {}) {
@@ -88,7 +89,7 @@ async function syncNow(db, now = Date.now(), onProgress = () => {}) {
   const top = (await listAll(url("groups", { creator: CREATOR, "sort-by": "created", "sort-dir": "desc", count: 200 })))
     .filter(g => !g.parent && recent(g));
 
-  const stats = { groups: 0 };
+  const stats = { groups: 0, onProgress };
   for (const g of top) {
     if (CONTAINER.test(g.name)) {
       const mode = Number(g.name.match(/[123]/)[0]);
