@@ -104,14 +104,11 @@ async function openMatch(id) {
 function renderBest(p) {
   if (!p) return panel("best", empty("Not enough games in this period yet."));
   const band = PlayerRating.band(p.rating);
-  const C = 2 * Math.PI * 62;
-  const frac = Math.min(p.rating, 2) / 2;
+  const pct = (Math.min(p.rating, 2) / 2 * 100).toFixed(1);
   const f = n => n == null ? "–" : n.toFixed(1);
-  panel("best", `<div class="ring"><svg viewBox="0 0 148 148" aria-hidden="true">
-      <circle class="track" cx="74" cy="74" r="62"/>
-      <circle class="fill ${band}" cx="74" cy="74" r="62" style="--c:${C.toFixed(1)};--off:${(C * (1 - frac)).toFixed(1)}"/>
-      <line class="tick" x1="6" y1="74" x2="18" y2="74"/></svg>
-      <div class="num">${p.rating.toFixed(2)}</div></div>
+  panel("best", `<div class="meter"><div class="num ${band}">${p.rating.toFixed(2)}</div>
+      <div class="gauge" aria-hidden="true"><i class="fill ${band}" style="width:${pct}%"></i><b class="avg"></b></div>
+      <div class="scale"><span>0</span><span>1.0 average</span><span>2</span></div></div>
     <div class="best-name">${esc(p.name)}</div>
     <div class="best-team">${esc(p.team || "")}</div>
     <div class="best-stats">

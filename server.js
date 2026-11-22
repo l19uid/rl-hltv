@@ -19,7 +19,7 @@ const SCHEDULE_FILE = process.env.SCHEDULE_FILE || path.join(__dirname, "schedul
 const SITE_NAME = process.env.SITE_NAME || "RL Pro Stats";
 const PRIZES_FILE = process.env.PRIZES_FILE || path.join(__dirname, "prizes.json");
 const PUBLIC = path.join(__dirname, "public");
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".woff2": "font/woff2" };
 
 const cache = new Map();
 
@@ -125,6 +125,8 @@ http
         playerRows: db.allPlayers().length,
         newestGame: games.length ? new Date(Math.max(...games.map(g => g.t))).toISOString() : null,
         series: state.stats,
+        dbPath: DB_PATH,
+        dbCreated: db.getMeta("created"),
         lastSync: db.getMeta("lastSync"),
         syncing: syncState.running,
         groupsDone: syncState.groups,
@@ -156,6 +158,7 @@ http
   })
   .listen(PORT, () => {
     console.log(`listening on :${PORT}`);
+    console.log(`database ${DB_PATH}, created ${db.getMeta("created")}, ${db.count()} games`);
     syncIfStale();
     setInterval(syncIfStale, SYNC_CHECK_MS);
   });

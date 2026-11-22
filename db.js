@@ -29,6 +29,7 @@ function openDb(file) {
     );
   `);
   if (!hadPlayers) db.exec("UPDATE groups SET crawled = 0; DELETE FROM meta WHERE key = 'lastSync';");
+  db.prepare("INSERT OR IGNORE INTO meta (key, value) VALUES ('created', ?)").run(new Date().toISOString());
 
   const upsert = db.prepare("INSERT OR REPLACE INTO games (id, t, blue, orange, bg, og, series, tid, mode) VALUES (@id, @t, @blue, @orange, @bg, @og, @series, @tid, @mode)");
   const upsertMany = db.transaction(rows => rows.forEach(r => upsert.run(r)));

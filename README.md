@@ -55,10 +55,20 @@ The data has no team for each player, so rosters are inferred: a player belongs 
 most of their recent series (recent ones count more). A player with only one series stays unassigned until
 they have played a second one against a different opponent.
 
-## Deploy
+## Deploy (Railway, with a volume)
 
-Needs a host where the database file survives restarts (Render paid plan with a disk at
-`/var/data` and `DB_PATH=/var/data/games.db`, Fly.io or Railway with a volume).
-Set `BALLCHASING_TOKEN` as a secret and `NODE_VERSION=22`. Build `npm install`, start `npm start`.
+The database must live on storage that survives redeploys, and the service must not sleep (a sleeping service
+pauses the sync).
+
+1. Push the code to GitHub. `data/` is gitignored; never commit the database.
+2. railway.com: New project, Deploy from GitHub repo, pick this repo.
+3. Add a volume to the service and mount it at `/data`.
+4. Variables: `BALLCHASING_TOKEN` (your key), `DB_PATH=/data/games.db`, optionally `SITE_NAME`.
+5. Settings, Networking: generate a domain. Leave app sleeping / serverless turned off.
+6. Open `/api/status`. `dbPath` should be `/data/games.db`. `dbCreated` must stay the same after every
+   redeploy; if it changes, the database is not on the volume. `games` and `groupsDone` should keep rising
+   until `syncing` is false.
+
+Other hosts work the same way: attach a volume, point `DB_PATH` at it, keep the service always on.
 
 Credit ballchasing.com as the data source.
