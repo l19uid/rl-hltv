@@ -1,0 +1,10 @@
+{
+  "_note": "Estimated prize pools in USD. Ballchasing has no prize data, so edit these to match Liquipedia. First matching rule wins; rules apply to the tournament name. 'mode' limits a rule to 3, 2 or 1.",
+  "rules": [
+    { "match": "world championship|worlds", "mode": 3, "usd": 1000000 },
+    { "match": "major", "mode": 3, "usd": 350000 },
+    { "match": "last chance|qualifier", "mode": 3, "usd": 25000 }
+  ],
+  "default": 50000,
+  "defaultByMode": { "1": 15000, "2": 25000 }
+}

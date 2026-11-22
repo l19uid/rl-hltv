@@ -27,13 +27,34 @@ function fromBallchasing(r) {
   };
 }
 
+const baselines = {};
+async function getBaseline(mode) {
+  if (!(mode in baselines)) {
+    baselines[mode] = fetch(`/api/player-baseline?mode=${mode}`).then(r => r.ok ? r.json() : null).catch(() => null);
+  }
+  return baselines[mode];
+}
+
+async function withRatings(m) {
+  const base = await getBaseline(Math.min(3, Math.max(1, m.size || 3)));
+  if (!base) return m;
+  for (const p of m.players) {
+    const c = PlayerRating.composite({ goals: p.goals, assists: p.assists, saves: p.saves, shots: p.shots, demos: p.demos, score: p.score }, base.means);
+    if (c != null) p.rating = Math.round(PlayerRating.toRating(c, base.mu, base.sigma) * 100) / 100;
+  }
+  return m;
+}
+
+const ratingBadge = r => r == null ? "–" : `<span class="rt ${PlayerRating.band(r)}">${r.toFixed(2)}</span>`;
+
 function teamTable(m, team, label, cls, mvp, showDemos) {
   const ps = m.players.filter(p => p.team === team).sort((a, b) => b.score - a.score);
   const max = Math.max(1, ...m.players.map(p => p.score));
-  const heads = ["Score", "G", "A", "Sv", "Sh", "Sh%"].concat(showDemos ? ["Demos"] : []);
+  const showRating = m.players.some(p => p.rating != null);
+  const heads = ["Score", "G", "A", "Sv", "Sh", "Sh%"].concat(showDemos ? ["Demos"] : []).concat(showRating ? ["Rating"] : []);
   const rows = ps.map(p => {
     const pct = p.shots ? Math.round(p.goals / p.shots * 100) + "%" : "–";
-    const cells = [p.goals, p.assists, p.saves, p.shots, pct].concat(showDemos ? [p.demos ?? "–"] : []);
+    const cells = [p.goals, p.assists, p.saves, p.shots, pct].concat(showDemos ? [p.demos ?? "–"] : []).concat(showRating ? [ratingBadge(p.rating)] : []);
     return `<tr><td class="name">${esc(p.name)}${p === mvp ? '<span class="star" title="MVP">★</span>' : ""}<span class="pf">${esc(p.platform)}</span></td>
       <td class="${p === mvp ? "top" : ""}"><span class="bar" style="width:${Math.round(p.score / max * 60)}px;background:var(--${cls})"></span>${p.score}</td>
       ${cells.map(c => `<td>${c}</td>`).join("")}</tr>`;
@@ -64,7 +85,7 @@ function notify(text, isError = false) {
 async function showReplay(id) {
   notify("Loading match…");
   try {
-    renderMatch(fromBallchasing(await api.get("replays/" + id)));
+    renderMatch(await withRatings(fromBallchasing(await api.get("replays/" + id))));
     notify("");
   } catch (e) { notify(e.message, true); }
 }
@@ -75,104 +96,20 @@ function openMatch(btn, scope) {
   showReplay(btn.dataset.id).then(() => $("out").scrollIntoView({ behavior: "smooth", block: "start" }));
 }
 
-function groupNode(g) {
-  return `<li><details data-group="${esc(g.id)}"><summary>${esc(g.name)}</summary><ul class="kids"></ul></details></li>`;
-}
-
-function gameButtons(games) {
-  return games.map(r => `<button class="game" data-id="${esc(r.id)}" title="${esc(r.blue?.name || "Blue")} vs ${esc(r.orange?.name || "Orange")}">${r.blue?.goals ?? "–"}–${r.orange?.goals ?? "–"}</button>`).join("");
-}
-
-async function fetchGames(id) {
-  return (await api.get(`replays?group=${id}&sort-by=replay-date&sort-dir=asc&count=50`)).list || [];
-}
-
-// A group's replays endpoint only returns replays directly inside it. A series holds games;
-// a stage or event holds other groups, so an empty result means "open it as a folder".
-async function resolveChild(li) {
-  const id = li.dataset.group;
-  try {
-    const games = await fetchGames(id);
-    if (games.length) {
-      li.querySelector(".games").innerHTML = gameButtons(games);
-      return;
-    }
-    const name = li.querySelector(".sname").innerHTML;
-    li.className = "";
-    li.removeAttribute("data-group");
-    li.innerHTML = `<details data-group="${esc(id)}"><summary>${name}</summary><ul class="kids"></ul></details>`;
-  } catch (e) {
-    li.querySelector(".games").innerHTML = `<span class="hint err">${esc(e.message)}</span>`;
-  }
-}
-
-async function fillGroup(details) {
-  if (details.dataset.loaded) return;
-  details.dataset.loaded = "1";
-  const ul = details.querySelector(".kids");
-  ul.innerHTML = '<li class="hint">Loading…</li>';
-  const id = details.dataset.group;
-  try {
-    const kids = (await api.get(`groups?group=${id}&sort-by=created&sort-dir=desc&count=200`)).list || [];
-    if (!kids.length) {
-      const games = await fetchGames(id);
-      ul.innerHTML = games.length ? `<li class="series"><span class="games">${gameButtons(games)}</span></li>` : '<li class="hint">Nothing in this group.</li>';
-      return;
-    }
-    ul.innerHTML = kids.map(g => `<li class="series" data-group="${esc(g.id)}"><span class="sname">${esc(g.name)}</span><span class="games"><span class="hint">…</span></span></li>`).join("");
-    for (const li of [...ul.children]) await resolveChild(li);
-  } catch (e) {
-    delete details.dataset.loaded;
-    ul.innerHTML = `<li class="hint err">${esc(e.message)}</li>`;
-  }
-}
-
-const yearOf = g => (g.created || "").slice(0, 4) || (g.name.match(/20\d\d/) || ["Other"])[0];
-let groupsByYear = {};
-
-function showYear(year) {
-  [...$("years").children].forEach(b => b.classList.toggle("on", b.dataset.year === year));
-  $("tree").innerHTML = `<ul>${groupsByYear[year].map(groupNode).join("")}</ul>`;
-}
-
-async function loadTree() {
-  try {
-    const cfg = await (await fetch("/api/config")).json();
-    if (!cfg.hasToken) return notify("Server has no ballchasing token configured — only replay upload is available.", true);
-    const list = (await api.get(`groups?creator=${cfg.creator}&sort-by=created&sort-dir=desc&count=200`)).list || [];
-    if (!list.length) return notify("No groups found for this uploader — check RLCS_CREATOR_ID.", true);
-    const roots = list.filter(g => !g.parent);
-    groupsByYear = {};
-    (roots.length ? roots : list).forEach(g => (groupsByYear[yearOf(g)] ||= []).push(g));
-    const years = Object.keys(groupsByYear).sort().reverse();
-    $("years").innerHTML = years.map(y => `<button data-year="${esc(y)}">${esc(y)}</button>`).join("");
-    showYear(years[0]);
-  } catch (e) { notify(e.message, true); }
-}
-
-$("years").onclick = e => {
-  const b = e.target.closest("button");
-  if (b) showYear(b.dataset.year);
-};
-
-$("tree").addEventListener("toggle", e => {
-  if (e.target.open && e.target.dataset.group) fillGroup(e.target);
-}, true);
-
-$("tree").onclick = e => {
-  const b = e.target.closest(".game");
-  if (b) openMatch(b, $("tree"));
-};
-
-let rankingRequest = 0;
+let mode = 3;
 let rankState = { days: 30, limit: 10 };
+let rankingRequest = 0;
+let tourneyRequest = 0;
+let playerRequest = 0;
+
+const fmtPrize = n => n >= 1e6 ? "$" + +(n / 1e6).toFixed(1) + "M" : "$" + Math.round(n / 1000) + "k";
 
 async function loadRanking() {
   const ticket = ++rankingRequest;
   const body = $("rankbody");
   $("teamgames").innerHTML = "";
   try {
-    const res = await fetch(`/api/rankings?days=${rankState.days}&limit=${rankState.limit}`);
+    const res = await fetch(`/api/rankings?mode=${mode}&days=${rankState.days}&limit=${rankState.limit}`);
     const d = await res.json();
     if (ticket !== rankingRequest) return;
     if (res.status === 503 && d.syncing) {
@@ -181,16 +118,41 @@ async function loadRanking() {
       return;
     }
     if (!res.ok) throw new Error(d.error || "Rankings unavailable");
+    const top = d.teams[0]?.points || 1500;
+    const low = Math.min(1400, ...d.teams.map(t => t.points));
     const rows = d.teams.map((t, i) => {
-      const pct = Math.round(t.winRate * 100);
-      return `<button class="rrow" data-team="${esc(t.name)}"><span class="rk">${i + 1}</span><span class="rn">${esc(t.name)}</span><span class="rg">${t.wins}–${t.games - t.wins}</span><span class="wr"><i style="width:${pct}%"></i><b>${pct}%</b></span></button>`;
+      const pct = Math.max(6, Math.round((t.points - low) / Math.max(1, top - low) * 100));
+      return `<button class="rrow" data-team="${esc(t.name)}"><span class="rk">${i + 1}</span><span class="rn">${esc(t.name)}</span><span class="rg" title="series W–L in this period">${t.wins}–${t.losses}</span><span class="wr"><i style="width:${pct}%"></i><b>${t.points}${t.provisional ? "*" : ""}</b></span></button>`;
     }).join("");
     const more = rankState.limit < 50 ? '<button id="more">Show top 50</button>' : '<button id="more">Show top 10</button>';
     const updated = d.updatedAt ? ` · updated ${esc(d.updatedAt.slice(0, 10))}` : "";
-    body.innerHTML = (rows || '<p class="hint">Not enough games in this period.</p>') +
-      `<p class="hint">Minimum ${d.minGames} games${updated} · click a team for its games</p>${more}`;
+    body.innerHTML = (rows || '<p class="hint">Not enough series in this period.</p>') +
+      `<p class="hint">Points: prize-weighted rating from every series since the history starts. W–L = series in this period, minimum ${d.minSeries}. * = fewer than 8 series so far${updated}.</p>${more}`;
   } catch (e) {
     if (ticket === rankingRequest) body.innerHTML = `<p class="hint err">${esc(e.message)}</p>`;
+  }
+}
+
+async function loadPlayers() {
+  const ticket = ++playerRequest;
+  const body = $("playerbody");
+  try {
+    const res = await fetch(`/api/players?mode=${mode}&days=${rankState.days}&limit=20`);
+    const d = await res.json();
+    if (ticket !== playerRequest) return;
+    if (res.status === 503 && d.syncing) {
+      body.innerHTML = `<p class="hint">${esc(d.error)}</p>`;
+      setTimeout(() => ticket === playerRequest && loadPlayers(), 15000);
+      return;
+    }
+    if (!res.ok) throw new Error(d.error || "Players unavailable");
+    const f = n => n == null ? "–" : n.toFixed(1);
+    const rows = d.players.map((p, i) => `<div class="prow"><span class="rk">${i + 1}</span><span class="pn">${esc(p.name)}</span><span class="pm pg">${p.games}g</span><span class="pm">${f(p.goals)} G · ${f(p.assists)} A · ${f(p.saves)} Sv</span><span class="pr">${ratingBadge(p.rating)}</span></div>`).join("");
+    body.innerHTML = rows
+      ? `<div class="prow h"><span></span><span>Player</span><span class="pg">Games</span><span class="pm">Per game</span><span class="pr">Rating</span></div>${rows}<p class="hint">Min ${d.minGames} games in this period. Each stat is compared with the league average for the mode, weighted goals 25% · score 25% · saves 20% · assists 15% · shots 10% · demos 5%, then scaled so ±2 standard deviations = 1.5 / 0.5. Few-game samples are pulled toward 1.00.</p>`
+      : '<p class="hint">Not enough games in this period.</p>';
+  } catch (e) {
+    if (ticket === playerRequest) body.innerHTML = `<p class="hint err">${esc(e.message)}</p>`;
   }
 }
 
@@ -198,7 +160,7 @@ async function loadTeamGames(team) {
   const box = $("teamgames");
   box.innerHTML = '<p class="hint">Loading…</p>';
   try {
-    const res = await fetch(`/api/team-games?days=${rankState.days}&team=${encodeURIComponent(team)}`);
+    const res = await fetch(`/api/team-games?mode=${mode}&days=${rankState.days}&team=${encodeURIComponent(team)}`);
     const d = await res.json();
     if (!res.ok) throw new Error(d.error || "Games unavailable");
     const pills = d.games.map(g => `<button class="game ${g.gf > g.ga ? "w" : "l"}" data-id="${esc(g.id)}" title="${esc(new Date(g.t).toISOString().slice(0, 10))}">${g.gf}–${g.ga} vs ${esc(g.opp)}</button>`).join("");
@@ -207,6 +169,60 @@ async function loadTeamGames(team) {
     box.innerHTML = `<p class="hint err">${esc(e.message)}</p>`;
   }
 }
+
+async function loadTournaments() {
+  const ticket = ++tourneyRequest;
+  const box = $("tourneys");
+  box.innerHTML = '<p class="hint">Loading…</p>';
+  try {
+    const res = await fetch(`/api/tournaments?mode=${mode}`);
+    const d = await res.json();
+    if (ticket !== tourneyRequest) return;
+    if (res.status === 503 && d.syncing) {
+      box.innerHTML = `<p class="hint">${esc(d.error)}</p>`;
+      setTimeout(() => ticket === tourneyRequest && loadTournaments(), 15000);
+      return;
+    }
+    if (!res.ok) throw new Error(d.error || "Tournaments unavailable");
+    if (!d.tournaments.length) { box.innerHTML = '<p class="hint">No tournaments for this mode yet.</p>'; return; }
+    let html = "", year = null;
+    for (const t of d.tournaments) {
+      if (t.year !== year) {
+        if (year !== null) html += "</div>";
+        year = t.year;
+        html += `<h2 class="yr">${t.year}</h2><div class="tlist">`;
+      }
+      html += `<div class="tour" data-id="${esc(t.id)}" data-mode="${t.mode}"><button class="thead"><span class="tn">${esc(t.title)}</span><span class="tw">${t.winner ? "🏆 " + esc(t.winner) : ""}</span><span class="tp" title="estimated prize pool (prizes.json)">${fmtPrize(t.prize)}</span></button><div class="tbody" hidden></div></div>`;
+    }
+    box.innerHTML = html + "</div>";
+  } catch (e) {
+    if (ticket === tourneyRequest) box.innerHTML = `<p class="hint err">${esc(e.message)}</p>`;
+  }
+}
+
+async function openTournament(tour) {
+  const body = tour.querySelector(".tbody");
+  body.hidden = !body.hidden;
+  tour.classList.toggle("open", !body.hidden);
+  if (body.hidden || body.dataset.loaded) return;
+  body.innerHTML = '<p class="hint">Loading…</p>';
+  try {
+    const res = await fetch(`/api/tournament?id=${encodeURIComponent(tour.dataset.id)}&mode=${tour.dataset.mode}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || "Tournament unavailable");
+    body.innerHTML = d.series.map(s => `<div class="ser"><span class="sn">${esc(s.a)} <b>${s.wa}–${s.wb}</b> ${esc(s.b)}${s.name ? `<em>${esc(s.name)}</em>` : ""}</span><span class="games">${s.games.map(g => `<button class="game" data-id="${esc(g.id)}">${g.a ?? "–"}–${g.b ?? "–"}</button>`).join("")}</span></div>`).join("") || '<p class="hint">No series.</p>';
+    body.dataset.loaded = "1";
+  } catch (e) {
+    body.innerHTML = `<p class="hint err">${esc(e.message)}</p>`;
+  }
+}
+
+$("tourneys").onclick = e => {
+  const game = e.target.closest(".game");
+  if (game) return openMatch(game, $("tourneys"));
+  const head = e.target.closest(".thead");
+  if (head) openTournament(head.parentElement);
+};
 
 $("rankbody").onclick = e => {
   if (e.target.id === "more") {
@@ -231,6 +247,17 @@ $("period").onclick = e => {
   [...$("period").children].forEach(c => c.classList.toggle("on", c === b));
   rankState.days = Number(b.dataset.days);
   loadRanking();
+  loadPlayers();
+};
+
+$("modes").onclick = e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  [...$("modes").children].forEach(c => c.classList.toggle("on", c === b));
+  mode = Number(b.dataset.mode);
+  loadRanking();
+  loadPlayers();
+  loadTournaments();
 };
 
 document.querySelector(".tabs").onclick = e => {
@@ -242,8 +269,8 @@ document.querySelector(".tabs").onclick = e => {
 };
 
 function loadFile(file) {
-  file.arrayBuffer().then(buf => {
-    try { renderMatch(parseReplayFile(buf)); notify(""); } catch (e) { notify(e.message, true); }
+  file.arrayBuffer().then(async buf => {
+    try { renderMatch(await withRatings(parseReplayFile(buf))); notify(""); } catch (e) { notify(e.message, true); }
   });
 }
 const drop = $("drop"), input = $("file");
@@ -253,5 +280,6 @@ drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
 drop.ondragleave = () => drop.classList.remove("over");
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0] && loadFile(e.dataTransfer.files[0]); };
 
-loadTree();
 loadRanking();
+loadPlayers();
+loadTournaments();

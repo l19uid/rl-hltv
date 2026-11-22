@@ -12,6 +12,7 @@
   <nav class="tabs"><button data-tab="pro" class="on">Pro games</button><button data-tab="upload">Upload replay</button></nav>
 
   <section id="pro">
+    <div class="chips" id="modes"><button data-mode="3" class="on">3v3</button><button data-mode="2">2v2</button><button data-mode="1">1v1</button></div>
     <div class="rank">
       <div class="rhead"><b>Top teams · game win rate</b>
         <div class="chips" id="period"><button data-days="30" class="on">1 month</button><button data-days="180">6 months</button><button data-days="365">1 year</button></div>
@@ -19,8 +20,11 @@
       <div id="rankbody"></div>
       <div id="teamgames"></div>
     </div>
-    <div class="chips" id="years"></div>
-    <div id="tree" class="tree"></div>
+    <div class="rank">
+      <div class="rhead"><b>Top players · rating</b><span class="hint">1.00 = average · &gt;1.5 amazing · &lt;0.5 awful</span></div>
+      <div id="playerbody"></div>
+    </div>
+    <div id="tourneys"></div>
   </section>
 
   <section id="upload" hidden>
@@ -32,6 +36,7 @@
   <p class="foot">Pro data: ballchasing.com. Uploaded files are parsed in your browser and never sent anywhere.</p>
 </div>
 <script src="parser.js"></script>
+<script src="prating.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

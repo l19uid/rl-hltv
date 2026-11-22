@@ -4,14 +4,17 @@ const path = require("path");
 const { TOKEN, CREATOR, BASE, request } = require("./ballchasing");
 const { openDb } = require("./db");
 const { syncNow } = require("./sync");
+const { computePlayers, baseline, leaderboard } = require("./players");
+const { loadPrizes, computeState, rankings, tournamentList, tournamentDetail } = require("./rating");
 
 const PORT = process.env.PORT || 3000;
-const ALLOWED = /^(replays|groups)(\/[A-Za-z0-9-]+)?$/;
+const ALLOWED = /^replays\/[A-Za-z0-9-]+$/;
 const TTL_MS = 5 * 60 * 1000;
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data", "games.db");
 const SYNC_INTERVAL_MS = Number(process.env.SYNC_INTERVAL_HOURS || 24) * 3600000;
 const SYNC_CHECK_MS = 3600000;
 const PERIODS = [30, 180, 365];
+const PRIZES_FILE = process.env.PRIZES_FILE || path.join(__dirname, "prizes.json");
 const PUBLIC = path.join(__dirname, "public");
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 
@@ -46,6 +49,14 @@ async function proxy(res, upstreamPath, search) {
 
 const db = openDb(DB_PATH);
 const syncState = { running: false, error: null };
+let state = null;
+let playerState = null;
+
+function recompute() {
+  state = computeState(db.allGames(), db.groupNames(), loadPrizes(PRIZES_FILE));
+  playerState = computePlayers(db.allPlayers());
+}
+recompute();
 
 async function syncIfStale() {
   if (!TOKEN || syncState.running) return;
@@ -54,8 +65,9 @@ async function syncIfStale() {
   syncState.running = true;
   try {
     const n = await syncNow(db);
+    recompute();
     syncState.error = null;
-    console.log(`sync: fetched ${n} games, ${db.count()} stored`);
+    console.log(`sync: ${n} games stored`);
   } catch (err) {
     syncState.error = err.message;
     console.error("sync failed:", err.message);
@@ -64,16 +76,23 @@ async function syncIfStale() {
   }
 }
 
-function fromDb(res, search, build) {
+function fromState(res, search, build) {
   if (!TOKEN) return send(res, 503, { error: "BALLCHASING_TOKEN is not configured" });
   if (!db.count()) {
-    const message = syncState.running ? "Building match history… the first sync can take a few minutes." : syncState.error || "No match history yet.";
+    const message = syncState.running ? "Building match history… the first sync can take 10+ minutes." : syncState.error || "No match history yet.";
     return send(res, 503, { error: message, syncing: syncState.running });
   }
   const params = new URLSearchParams(search);
+  const mode = Number(params.get("mode"));
+  if (![1, 2, 3].includes(mode)) return send(res, 400, { error: "mode must be 1, 2 or 3" });
+  const body = build(mode, params);
+  if (!body) return send(res, 404, { error: "not found" });
+  send(res, 200, { ...body, updatedAt: db.getMeta("lastSync") });
+}
+
+function periodOf(params) {
   const days = Number(params.get("days"));
-  if (!PERIODS.includes(days)) return send(res, 400, { error: "days must be 30, 180 or 365" });
-  send(res, 200, { ...build(days, params), updatedAt: db.getMeta("lastSync") });
+  return PERIODS.includes(days) ? days : 30;
 }
 
 function serveStatic(res, pathname) {
@@ -92,10 +111,22 @@ http
     if (req.method !== "GET") return send(res, 405, { error: "method not allowed" });
     if (url.pathname === "/api/config") return send(res, 200, { creator: CREATOR, hasToken: Boolean(TOKEN) });
     if (url.pathname === "/api/rankings") {
-      return fromDb(res, url.search, (days, p) => db.rank(days, Math.min(Number(p.get("limit")) || 10, 50)));
+      return fromState(res, url.search, (mode, p) => rankings(state, mode, periodOf(p), Math.min(Number(p.get("limit")) || 10, 50)));
+    }
+    if (url.pathname === "/api/tournaments") {
+      return fromState(res, url.search, mode => ({ tournaments: tournamentList(state, mode) }));
+    }
+    if (url.pathname === "/api/tournament") {
+      return fromState(res, url.search, (mode, p) => tournamentDetail(state, p.get("id") || "", mode));
+    }
+    if (url.pathname === "/api/players") {
+      return fromState(res, url.search, (mode, p) => leaderboard(playerState, mode, periodOf(p), Math.min(Number(p.get("limit")) || 20, 50)));
+    }
+    if (url.pathname === "/api/player-baseline") {
+      return fromState(res, url.search, mode => baseline(playerState, mode));
     }
     if (url.pathname === "/api/team-games") {
-      return fromDb(res, url.search, (days, p) => ({ games: db.teamGames(p.get("team") || "", days) }));
+      return fromState(res, url.search, (mode, p) => ({ games: db.teamGames(p.get("team") || "", mode, periodOf(p)) }));
     }
     if (url.pathname.startsWith("/api/ballchasing/")) {
       return proxy(res, url.pathname.slice("/api/ballchasing/".length), url.search);
