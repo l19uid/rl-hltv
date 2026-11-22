@@ -102,6 +102,9 @@ let rankingRequest = 0;
 let tourneyRequest = 0;
 let playerRequest = 0;
 
+const syncNote = d => d.syncing ? `<p class="hint">Still loading history (${d.groupsDone} groups so far) — newest events first, this list fills in as it goes.</p>` : "";
+if (typeof window !== "undefined") setInterval(() => { if (document.querySelector(".syncing")) { loadRanking(); loadPlayers(); loadTournaments(); } }, 60000);
+
 const fmtPrize = n => n >= 1e6 ? "$" + +(n / 1e6).toFixed(1) + "M" : "$" + Math.round(n / 1000) + "k";
 
 async function loadRanking() {
@@ -126,7 +129,8 @@ async function loadRanking() {
     }).join("");
     const more = rankState.limit < 50 ? '<button id="more">Show top 50</button>' : '<button id="more">Show top 10</button>';
     const updated = d.updatedAt ? ` · updated ${esc(d.updatedAt.slice(0, 10))}` : "";
-    body.innerHTML = (rows || `<p class="hint">Not enough series in this period.${d.latest ? ` Newest data is from ${esc(new Date(d.latest).toISOString().slice(0, 10))}.` : ""} <a href="/api/status" target="_blank">Data status</a></p>`) +
+    document.body.classList.toggle("syncing", !!d.syncing);
+    body.innerHTML = syncNote(d) + (rows || `<p class="hint">Not enough series in this period.${d.latest ? ` Newest data is from ${esc(new Date(d.latest).toISOString().slice(0, 10))}.` : ""} <a href="/api/status" target="_blank">Data status</a></p>`) +
       `<p class="hint">Points: prize-weighted rating from every series since the history starts. W–L = series in this period, minimum ${d.minSeries}. * = fewer than 8 series so far${updated}.</p>${more}`;
   } catch (e) {
     if (ticket === rankingRequest) body.innerHTML = `<p class="hint err">${esc(e.message)}</p>`;
@@ -194,7 +198,7 @@ async function loadTournaments() {
       }
       html += `<div class="tour" data-id="${esc(t.id)}" data-mode="${t.mode}"><button class="thead"><span class="tn">${esc(t.title)}</span><span class="tw">${t.winner ? "🏆 " + esc(t.winner) : ""}</span><span class="tp" title="estimated prize pool (prizes.json)">${fmtPrize(t.prize)}</span></button><div class="tbody" hidden></div></div>`;
     }
-    box.innerHTML = html + "</div>";
+    box.innerHTML = syncNote(d) + html + "</div>";
   } catch (e) {
     if (ticket === tourneyRequest) box.innerHTML = `<p class="hint err">${esc(e.message)}</p>`;
   }

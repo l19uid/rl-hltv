@@ -72,11 +72,15 @@ async function walk(db, g, ctx, now) {
     mode: mode ?? modeFromSize(r) ?? 3,
   })));
 
-  for (const child of await childGroups(g.id)) await walk(db, child, { tid: ctx.tid, mode }, now);
+  // A series holds games directly; only events and stages hold sub-groups, so skip the extra request.
+  if (!replays.length) {
+    for (const child of await childGroups(g.id)) await walk(db, child, { tid: ctx.tid, mode, stats: ctx.stats }, now);
+  }
   db.markCrawled(g.id);
+  ctx.stats.groups++;
 }
 
-async function syncNow(db, now = Date.now()) {
+async function syncNow(db, now = Date.now(), onProgress = () => {}) {
   if (!TOKEN) throw new Error("BALLCHASING_TOKEN is not set");
   const cutoff = now - HISTORY_DAYS * DAY_MS;
   const recent = g => (Date.parse(g.created) || now) >= cutoff - 60 * DAY_MS;
@@ -84,12 +88,17 @@ async function syncNow(db, now = Date.now()) {
   const top = (await listAll(url("groups", { creator: CREATOR, "sort-by": "created", "sort-dir": "desc", count: 200 })))
     .filter(g => !g.parent && recent(g));
 
+  const stats = { groups: 0 };
   for (const g of top) {
     if (CONTAINER.test(g.name)) {
       const mode = Number(g.name.match(/[123]/)[0]);
-      for (const child of (await childGroups(g.id)).filter(recent)) await walk(db, child, { tid: child.id, mode }, now);
+      for (const child of (await childGroups(g.id)).filter(recent)) {
+        await walk(db, child, { tid: child.id, mode, stats }, now);
+        onProgress(stats.groups);
+      }
     } else {
-      await walk(db, g, { tid: g.id, mode: null }, now);
+      await walk(db, g, { tid: g.id, mode: null, stats }, now);
+      onProgress(stats.groups);
     }
   }
 

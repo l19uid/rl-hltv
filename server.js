@@ -48,7 +48,7 @@ async function proxy(res, upstreamPath, search) {
 }
 
 const db = openDb(DB_PATH);
-const syncState = { running: false, error: null };
+const syncState = { running: false, error: null, groups: 0 };
 let state = null;
 let playerState = null;
 
@@ -64,7 +64,11 @@ async function syncIfStale() {
   if (Date.now() - last < SYNC_INTERVAL_MS) return;
   syncState.running = true;
   try {
-    const n = await syncNow(db);
+    syncState.groups = 0;
+    const n = await syncNow(db, Date.now(), groups => {
+      syncState.groups = groups;
+      recompute();
+    });
     recompute();
     syncState.error = null;
     console.log(`sync: ${n} games stored`);
@@ -87,7 +91,7 @@ function fromState(res, search, build) {
   if (![1, 2, 3].includes(mode)) return send(res, 400, { error: "mode must be 1, 2 or 3" });
   const body = build(mode, params);
   if (!body) return send(res, 404, { error: "not found" });
-  send(res, 200, { ...body, updatedAt: db.getMeta("lastSync") });
+  send(res, 200, { ...body, updatedAt: db.getMeta("lastSync"), syncing: syncState.running, groupsDone: syncState.groups });
 }
 
 function periodOf(params) {
@@ -120,6 +124,7 @@ http
         series: state.stats,
         lastSync: db.getMeta("lastSync"),
         syncing: syncState.running,
+        groupsDone: syncState.groups,
         syncError: syncState.error,
       });
     }
