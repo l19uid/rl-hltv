@@ -4,7 +4,8 @@ const path = require("path");
 const { TOKEN, CREATOR, BASE, request } = require("./ballchasing");
 const { openDb } = require("./db");
 const { syncNow } = require("./sync");
-const { computePlayers, baseline, leaderboard } = require("./players");
+const { computePlayers, baseline } = require("./players");
+const { buildHome, loadSchedule } = require("./home");
 const { loadPrizes, computeState, rankings, tournamentList, tournamentDetail } = require("./rating");
 
 const PORT = process.env.PORT || 3000;
@@ -14,6 +15,8 @@ const DB_PATH = process.env.DB_PATH || path.join(__dirname, "data", "games.db");
 const SYNC_INTERVAL_MS = Number(process.env.SYNC_INTERVAL_HOURS || 24) * 3600000;
 const SYNC_CHECK_MS = 3600000;
 const PERIODS = [30, 180, 365];
+const SCHEDULE_FILE = process.env.SCHEDULE_FILE || path.join(__dirname, "schedule.json");
+const SITE_NAME = process.env.SITE_NAME || "RL Pro Stats";
 const PRIZES_FILE = process.env.PRIZES_FILE || path.join(__dirname, "prizes.json");
 const PUBLIC = path.join(__dirname, "public");
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
@@ -113,7 +116,7 @@ http
   .createServer((req, res) => {
     const url = new URL(req.url, "http://localhost");
     if (req.method !== "GET") return send(res, 405, { error: "method not allowed" });
-    if (url.pathname === "/api/config") return send(res, 200, { creator: CREATOR, hasToken: Boolean(TOKEN) });
+    if (url.pathname === "/api/config") return send(res, 200, { creator: CREATOR, hasToken: Boolean(TOKEN), siteName: SITE_NAME });
     if (url.pathname === "/api/status") {
       const games = db.allGames();
       return send(res, 200, {
@@ -128,17 +131,17 @@ http
         syncError: syncState.error,
       });
     }
-    if (url.pathname === "/api/rankings") {
-      return fromState(res, url.search, (mode, p) => rankings(state, mode, periodOf(p), Math.min(Number(p.get("limit")) || 10, 50)));
+    if (url.pathname === "/api/home") {
+      return fromState(res, url.search, (mode, p) => buildHome({
+        state, playerState, schedule: loadSchedule(SCHEDULE_FILE), mode, days: periodOf(p),
+        teamLimit: Math.min(Math.max(Number(p.get("teams")) || 5, 1), 15),
+      }));
     }
     if (url.pathname === "/api/tournaments") {
       return fromState(res, url.search, mode => ({ tournaments: tournamentList(state, mode) }));
     }
     if (url.pathname === "/api/tournament") {
       return fromState(res, url.search, (mode, p) => tournamentDetail(state, p.get("id") || "", mode));
-    }
-    if (url.pathname === "/api/players") {
-      return fromState(res, url.search, (mode, p) => leaderboard(playerState, mode, periodOf(p), Math.min(Number(p.get("limit")) || 20, 50)));
     }
     if (url.pathname === "/api/player-baseline") {
       return fromState(res, url.search, mode => baseline(playerState, mode));

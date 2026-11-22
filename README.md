@@ -2,8 +2,11 @@
 
 Match scoreboards in an HLTV-style layout.
 
-- **Pro games**: top teams by win rate (1 month / 6 months / 1 year), team game lists and an
-  event browser, from the ballchasing.com API.
+
+Dashboard for the pro Rocket League scene, from the ballchasing.com API. Layout: best player and top
+players (left), top teams with recent titles, game record and rosters plus upcoming and recent tournaments
+(middle), upcoming and past matches (right), and the full tournament archive below. The 3v3 / 2v2 / 1v1 and
+1 month / 6 months / 1 year buttons filter everything. Click a game score to open its scoreboard.
 
 ## Run
 
@@ -12,7 +15,7 @@ Match scoreboards in an HLTV-style layout.
 
 Token: ballchasing.com → Upload tab → API key. Requires Node 22+.
 
-Optional env: `PORT`, `RLCS_CREATOR_ID`, `DB_PATH` (default `data/games.db`),
+Optional env: `SITE_NAME` (header title, default "RL Pro Stats"), `SCHEDULE_FILE`, `PORT`, `RLCS_CREATOR_ID`, `DB_PATH` (default `data/games.db`),
 `SYNC_INTERVAL_HOURS` (default 24), `REQUEST_GAP_MS` (default 600).
 
 ## Match history and ranking
@@ -39,6 +42,18 @@ group's stats. Each stat is divided by the league average per game for that mode
 `public/prating.js`, and scaled so +2 / -2 standard deviations = 1.5 / 0.5 (1.00 = average). The leaderboard
 is calibrated across players and shrinks small samples toward 1.00; single-match ratings on the scoreboard use
 a per-game scale. Bands: <0.5 awful, 0.5-1 below average, 1-1.5 great, 1.5+ amazing.
+
+## Upcoming tournaments and matches
+
+Ballchasing only has games that were already played, so upcoming events come from `schedule.json`, which you
+edit by hand (copy them from Liquipedia). Entries in the past are hidden automatically and the file is read on
+every page load, so no restart is needed. `mode` (3, 2 or 1) is optional.
+
+## Team rosters
+
+The data has no team for each player, so rosters are inferred: a player belongs to the team that appears in
+most of their recent series (recent ones count more). A player with only one series stays unassigned until
+they have played a second one against a different opponent.
 
 ## Deploy
 

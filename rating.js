@@ -123,7 +123,7 @@ function computeState(games, names, prizes) {
   }
 
   const latest = series.length ? series[series.length - 1].t : 0;
-  return { tournaments, teams, latest, stats: { ...series.stats, usable: series.length, decided: series.filter(s => s.winner).length } };
+  return { tournaments, teams, latest, series, games, stats: { ...series.stats, usable: series.length, decided: series.filter(s => s.winner).length } };
 }
 
 function rankings(state, mode, days, limit, now = Date.now()) {

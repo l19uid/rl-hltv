@@ -3,33 +3,61 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Rocket League Match Stats</title>
+<title>RL Pro Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=Saira+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="wrap">
-  <h1>Rocket League · Match Stats</h1>
-
-  <section id="pro">
-    <div class="chips" id="modes"><button data-mode="3" class="on">3v3</button><button data-mode="2">2v2</button><button data-mode="1">1v1</button></div>
-    <div class="rank">
-      <div class="rhead"><b>Top teams · game win rate</b>
-        <div class="chips" id="period"><button data-days="30" class="on">1 month</button><button data-days="180">6 months</button><button data-days="365">1 year</button></div>
+<header class="top">
+  <div class="top-in">
+    <h1 id="site"><span class="mark" aria-hidden="true"></span><span id="site-name">RL Pro Stats</span></h1>
+    <div class="controls">
+      <div class="seg" id="modes" role="group" aria-label="Game mode">
+        <button data-mode="3" class="on">3v3</button><button data-mode="2">2v2</button><button data-mode="1">1v1</button>
       </div>
-      <div id="rankbody"></div>
-      <div id="teamgames"></div>
+      <div class="seg" id="period" role="group" aria-label="Period">
+        <button data-days="30" class="on">1 month</button><button data-days="180">6 months</button><button data-days="365">1 year</button>
+      </div>
     </div>
-    <div class="rank">
-      <div class="rhead"><b>Top players · rating</b><span class="hint">1.00 = average · &gt;1.5 amazing · &lt;0.5 awful</span></div>
-      <div id="playerbody"></div>
-    </div>
-    <div id="tourneys"></div>
-  </section>
+  </div>
+</header>
 
-  <div id="msg"></div>
+<div id="banner" class="banner" hidden></div>
+
+<main class="page">
+  <aside class="col left">
+    <section class="panel best" id="best" aria-labelledby="h-best"><div class="ph"><h2 id="h-best">Best player</h2><span class="sub" data-period></span></div><div class="body"><p class="hint">Loading…</p></div></section>
+    <section class="panel" id="players" aria-labelledby="h-players"><div class="ph"><h2 id="h-players">Top players</h2><span class="sub" data-period></span></div><div class="body"><p class="hint">Loading…</p></div></section>
+  </aside>
+
+  <div class="col mid">
+    <section class="panel" id="teams" aria-labelledby="h-teams"><div class="ph"><h2 id="h-teams">Top teams</h2><span class="sub" data-period></span></div><div class="body"><p class="hint">Loading…</p></div></section>
+    <div class="pair">
+      <section class="panel" id="utourneys" aria-labelledby="h-ut"><div class="ph"><h2 id="h-ut">Upcoming tournaments</h2></div><div class="body"><p class="hint">Loading…</p></div></section>
+      <section class="panel" id="rtourneys" aria-labelledby="h-rt"><div class="ph"><h2 id="h-rt">Recent tournaments</h2></div><div class="body"><p class="hint">Loading…</p></div></section>
+    </div>
+  </div>
+
+  <aside class="col right">
+    <section class="panel" id="umatches" aria-labelledby="h-um"><div class="ph"><h2 id="h-um">Upcoming matches</h2></div><div class="body"><p class="hint">Loading…</p></div></section>
+    <section class="panel" id="past" aria-labelledby="h-past"><div class="ph"><h2 id="h-past">Past matches</h2></div><div class="body"><p class="hint">Loading…</p></div></section>
+  </aside>
+</main>
+
+<section class="archive" aria-labelledby="h-arch">
+  <h2 id="h-arch">All tournaments</h2>
+  <div id="archive"><p class="hint">Loading…</p></div>
+</section>
+
+<footer class="foot">Match data from ballchasing.com. Prize pools are estimates used for the team ranking.</footer>
+
+<dialog id="dlg" aria-label="Match scoreboard">
+  <button class="x" id="dlg-x" aria-label="Close scoreboard">×</button>
   <div id="out"></div>
-  <p class="foot">Pro data: ballchasing.com.</p>
-</div>
+</dialog>
+
 <script src="prating.js"></script>
 <script src="app.js"></script>
 </body>

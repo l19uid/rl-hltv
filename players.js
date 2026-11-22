@@ -78,25 +78,31 @@ function baseline(state, mode) {
   return { mode, means: m.means, mu: m.mu, sigma: m.sigmaGame };
 }
 
-function leaderboard(state, mode, days, limit, now = Date.now()) {
+function playerTable(state, mode, days, now = Date.now()) {
   const m = state[mode];
-  const minGames = days <= 30 ? 6 : days <= 180 ? 12 : 20;
   now = Math.min(now, state.latest || now);
   const cutoff = now - days * DAY_MS;
-  const players = [];
-  for (const prs of groupBy(m.rows.filter(r => r.t >= cutoff), r => r.pid).values()) {
+  const out = [];
+  for (const [pid, prs] of groupBy(m.rows.filter(r => r.t >= cutoff), r => r.pid)) {
     const a = aggregate(prs);
-    if (a.games < minGames) continue;
+    if (!a.games) continue;
     const pg = perGame(a);
     const c = composite(pg, m.means);
     if (c == null) continue;
     const shrink = a.games / (a.games + SHRINK_GAMES);
     const rating = Math.max(0, 1 + 0.25 * ((c - m.muPlayers) / m.sigmaPlayers) * shrink);
     const latest = prs.reduce((x, y) => (y.t > x.t ? y : x));
-    players.push({ name: latest.name, games: a.games, rating: Math.round(rating * 100) / 100, goals: pg.goals, assists: pg.assists, saves: pg.saves });
+    out.push({ pid, name: latest.name, games: a.games, rating: Math.round(rating * 100) / 100, goals: pg.goals, assists: pg.assists, saves: pg.saves });
   }
-  players.sort((x, y) => y.rating - x.rating || y.games - x.games);
+  return out;
+}
+
+function leaderboard(state, mode, days, limit, now = Date.now()) {
+  const minGames = days <= 30 ? 6 : days <= 180 ? 12 : 20;
+  const players = playerTable(state, mode, days, now)
+    .filter(p => p.games >= minGames)
+    .sort((x, y) => y.rating - x.rating || y.games - x.games);
   return { mode, days, minGames, latest: state.latest || null, players: players.slice(0, limit) };
 }
 
-module.exports = { computePlayers, baseline, leaderboard };
+module.exports = { computePlayers, baseline, leaderboard, playerTable };
